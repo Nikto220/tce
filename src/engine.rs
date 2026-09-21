@@ -38,6 +38,7 @@ impl Engine {
 
     pub fn go(&mut self) {
         let moves = self.board.generate_moves();
+        if moves.is_empty() {return;}
         let mv = moves[rand::random_range(..moves.len())];
         println!("bestmove {}", mv);
     }

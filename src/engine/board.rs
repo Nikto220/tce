@@ -106,19 +106,20 @@ pub struct Undo {
 impl Board {
     pub fn new() -> Self {
         let pieces = [
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
-            0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000u64,
+            0x0000_0000_0000_FF00u64, // WP
+            0x0000_0000_0000_0042u64, // WN
+            0x0000_0000_0000_0024u64, // WB
+            0x0000_0000_0000_0081u64, // WR
+            0x0000_0000_0000_0008u64, // WQ
+            0x0000_0000_0000_0010u64, // WK
+            0x00FF_0000_0000_0000u64, // BP
+            0x4200_0000_0000_0000u64, // BN
+            0x2400_0000_0000_0000u64, // BB
+            0x8100_0000_0000_0000u64, // BR
+            0x0800_0000_0000_0000u64, // BQ
+            0x1000_0000_0000_0000u64, // BK
         ];
+
         let white_occ = pieces[0] | pieces[1] | pieces[2] | pieces[3] | pieces[4] | pieces[5];
         let black_occ = pieces[6] | pieces[7] | pieces[8] | pieces[9] | pieces[10] | pieces[11];
         Self {
@@ -127,10 +128,10 @@ impl Board {
             black_occ,
             occupancy: white_occ | black_occ,
             turn: true,
-            castling: 0b00000000,
+            castling: 0b00001111,
             en_passant: None,
         }
-    }
+}
 
     pub fn position_startpos(&mut self) {
         let pieces = [
@@ -761,7 +762,7 @@ impl Board {
                 targets &= targets - 1;
 
                 ret.push(Move {
-                    from: to - 16,
+                    from: to + 16,
                     to,
                     move_type: MoveType::DoublePawnPush,
                     promotion: None,
@@ -776,7 +777,7 @@ impl Board {
 
                 let from = to + 7;
 
-                if to >= 56 {
+                if to < 8 {
                     for promotion in [WQ, WR, WB, WN] {
                         ret.push(Move {
                             from,
@@ -803,7 +804,7 @@ impl Board {
 
                 let from = to + 9;
 
-                if to >= 56 {
+                if to < 8 {
                     for promotion in [WQ, WR, WB, WN] {
                         ret.push(Move {
                             from,
@@ -854,11 +855,11 @@ impl Board {
                 return true;
             }
         } else if undo.mv.move_type == MoveType::CastleQueenSide {
-            if turn && !self.is_square_attacked(E1, false) && !self.is_square_attacked(D1, false) && !self.is_square_attacked(C1, false) && !self.is_square_attacked(B1, false) {
+            if turn && !self.is_square_attacked(E1, false) && !self.is_square_attacked(D1, false) && !self.is_square_attacked(C1, false) {
                 return true;
             }
 
-            if !turn && !self.is_square_attacked(E8, false) && !self.is_square_attacked(D8, false) && !self.is_square_attacked(C8, false) && !self.is_square_attacked(B1, false){
+            if !turn && !self.is_square_attacked(E8, false) && !self.is_square_attacked(D8, false) && !self.is_square_attacked(C8, false) {
                 return true;
             }
         }
@@ -868,6 +869,7 @@ impl Board {
 
     pub fn generate_moves(&mut self) -> Vec<Move> {
         let pseudo_legal = self.generate_pseudo_legal_moves();
+        //println!("{:#?}", pseudo_legal);
         let mut legal = Vec::<Move>::new();
 
         for mv in pseudo_legal {
