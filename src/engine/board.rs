@@ -769,7 +769,7 @@ impl Board {
                 });
             }
 
-            let mut targets = ((pawns & NOT_A_FILE) >> 7) & enemy;
+            let mut targets = ((pawns & NOT_H_FILE) >> 7) & enemy;
 
             while targets != 0 {
                 let to = targets.trailing_zeros() as u8;
@@ -796,7 +796,7 @@ impl Board {
                 }
             }
 
-            let mut targets = ((pawns & NOT_H_FILE) >> 9) & enemy;
+            let mut targets = ((pawns & NOT_A_FILE) >> 9) & enemy;
 
             while targets != 0 {
                 let to = targets.trailing_zeros() as u8;
