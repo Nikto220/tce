@@ -7,3 +7,7 @@
 
 # 0.1.0-pre.1.2:
 - fixed black pawn capture moves
+
+# 0.1.0:
+- release
+- added a license and a description
