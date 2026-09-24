@@ -1,6 +1,8 @@
+#![allow(long_running_const_eval)]
+
 use std::io::{self, BufRead};
 
-mod engine;
+pub mod engine;
 use engine::*;
 
 fn main() {

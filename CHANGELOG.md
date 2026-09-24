@@ -11,3 +11,6 @@
 # 0.1.0:
 - release
 - added a license and a description
+
+# 0.1.1-pre.1:
+- added piece generation using PEXT

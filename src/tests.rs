@@ -1,3 +1,5 @@
+use crate::engine::attacks::{BISHOP_DIRS, ROOK_DIRS};
+
 use super::*;
 
 #[test]
@@ -162,36 +164,36 @@ fn make_unmake_sequence() {
 
 #[test]
 fn bishop_attacks_test() {
-    println!("{:b}", engine::attacks::bishop_attacks(27u8, 0u64));
+    println!("{:b}", engine::attacks::slow_attacks(27u8, 0u64, &BISHOP_DIRS));
     assert_eq!(
-        engine::attacks::bishop_attacks(27u8, 0u64),
+        engine::attacks::slow_attacks(27u8, 0u64, &BISHOP_DIRS),
         0b10000000_01000001_00100010_00010100_00000000_00010100_00100010_01000001u64
     );
 }
 
 #[test]
 fn rook_attacks_test() {
-    println!("{:b}", engine::attacks::rook_attacks(27u8, 0u64));
+    println!("{:b}", engine::attacks::slow_attacks(27u8, 0u64, &ROOK_DIRS));
     assert_eq!(
-        engine::attacks::rook_attacks(27u8, 0u64),
+        engine::attacks::slow_attacks(27u8, 0u64, &ROOK_DIRS),
         0b00001000_00001000_00001000_00001000_11110111_00001000_00001000_00001000u64
     );
 }
 
 #[test]
 fn rook_attacks_opponents_test() {
-    println!("{:b}", engine::attacks::rook_attacks(27u8, 0u64));
+    println!("{:b}", engine::attacks::slow_attacks(27u8, 0u64, &ROOK_DIRS));
     assert_eq!(
-        engine::attacks::rook_attacks(27u8, 0b00001000_00000000u64),
+        engine::attacks::slow_attacks(27u8, 0b00001000_00000000u64, &ROOK_DIRS),
         0b00001000_00001000_00001000_00001000_11110111_00001000_00001000_00000000u64
     );
 }
 
 #[test]
 fn bishop_attacks_opponents_test() {
-    println!("{:b}", engine::attacks::bishop_attacks(27u8, 0u64));
+    println!("{:b}", engine::attacks::slow_attacks(27u8, 0u64, &BISHOP_DIRS));
     assert_eq!(
-        engine::attacks::bishop_attacks(27u8, 0b00010000_00000000_00000000u64),
+        engine::attacks::slow_attacks(27u8, 0b00010000_00000000_00000000u64, &BISHOP_DIRS),
         0b10000000_01000001_00100010_00010100_00000000_00010100_00000010_00000001u64
     );
 }

@@ -191,6 +191,8 @@ impl Board {
             en_passant: self.en_passant,
         };
 
+        //println!("{:#?}", mv);
+
         let piece = self.piece_at(mv.from).expect("Brak figury na polu from");
 
         // --------------------------------------------------
@@ -487,7 +489,7 @@ impl Board {
             let from = pieces.trailing_zeros() as u8;
             pieces &= pieces - 1;
 
-            let mut targets = bishop_attacks(from, self.occupancy) & !own;
+            let mut targets = bishop_attacks(from as usize, self.occupancy) & !own;
 
             while targets != 0 {
                 let to = targets.trailing_zeros() as u8;
@@ -514,7 +516,7 @@ impl Board {
             let from = pieces.trailing_zeros() as u8;
             pieces &= pieces - 1;
 
-            let mut targets = rook_attacks(from, self.occupancy) & !own;
+            let mut targets = rook_attacks(from as usize, self.occupancy) & !own;
 
             while targets != 0 {
                 let to = targets.trailing_zeros() as u8;
@@ -541,8 +543,7 @@ impl Board {
             let from = pieces.trailing_zeros() as u8;
             pieces &= pieces - 1;
 
-            let mut targets =
-                (bishop_attacks(from, self.occupancy) | rook_attacks(from, self.occupancy)) & !own;
+            let mut targets = queen_attacks(from as usize, self.occupancy) & !own;
 
             while targets != 0 {
                 let to = targets.trailing_zeros() as u8;
@@ -778,7 +779,7 @@ impl Board {
                 let from = to + 7;
 
                 if to < 8 {
-                    for promotion in [WQ, WR, WB, WN] {
+                    for promotion in [BQ, BR, BB, BN] {
                         ret.push(Move {
                             from,
                             to,
@@ -805,7 +806,7 @@ impl Board {
                 let from = to + 9;
 
                 if to < 8 {
-                    for promotion in [WQ, WR, WB, WN] {
+                    for promotion in [BQ, BR, BB, BN] {
                         ret.push(Move {
                             from,
                             to,
@@ -958,12 +959,12 @@ impl Board {
         }
 
         // gońce + hetmany
-        if bishop_attacks(square, self.occupancy) & (bishops | queens) != 0 {
+        if bishop_attacks(square as usize, self.occupancy) & (bishops | queens) != 0 {
             return true;
         }
 
         // wieże + hetmany
-        if rook_attacks(square, self.occupancy) & (rooks | queens) != 0 {
+        if rook_attacks(square as usize, self.occupancy) & (rooks | queens) != 0 {
             return true;
         }
 
