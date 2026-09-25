@@ -14,3 +14,6 @@
 
 # 0.1.1-pre.1:
 - added piece generation using PEXT
+
+# 0.1.1-pre.2:
+- added piece generation using magic bitboards
