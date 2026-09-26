@@ -17,3 +17,5 @@
 
 # 0.1.1-pre.2:
 - added piece generation using magic bitboards (as an alternative to the PEXT generation)
+- updated README.md
+- added LICENSE-MIT and LICENSE-APACHE
