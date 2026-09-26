@@ -1,5 +1,5 @@
 <div align="center">
-<img src="./assets/logo_tce.png" width="400px"/>
+<img src="./assets/logo_tce.png" width="128px"/>
 
 <br />
 <br />
