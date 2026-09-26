@@ -21,7 +21,7 @@ TCE is a Terrible Chess Engine that was created as a personal project to learn h
 
 # Installation
 
-You can install binaries from [here][https://github.com/Nikto220/tce/releases].
+You can install binaries from [here](https://github.com/Nikto220/tce/releases).
 You can also run:
 ```
 cargo install tce
