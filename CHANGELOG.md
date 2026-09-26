@@ -19,3 +19,6 @@
 - added piece generation using magic bitboards (as an alternative to the PEXT generation)
 - updated README.md
 - added LICENSE-MIT and LICENSE-APACHE
+
+# 0.1.1:
+- a stable, tested release containing all of the features from the previous versions
