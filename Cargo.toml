@@ -4,6 +4,8 @@ version = "0.1.1-pre.2"
 edition = "2024"
 description = "A Terrible Chess Engine"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/Nikto220/tce"
 
 [dependencies]
 rand = "0.10.3"
