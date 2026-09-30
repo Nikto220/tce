@@ -166,6 +166,10 @@ impl Board {
         self.pieces
     }
 
+    pub fn get_turn(&self) -> bool {
+        self.turn
+    }
+
     pub fn position_startpos_moves(&mut self, moves: &[&str]) {
         self.position_startpos();
 
