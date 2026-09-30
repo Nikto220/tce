@@ -55,7 +55,7 @@ pub fn run() {
                                 engine.go_depth(num);
                             }
                         },
-                        _ => engine.go_depth(4),
+                        _ => engine.go_depth(5),
                     }
                 }
                 else {

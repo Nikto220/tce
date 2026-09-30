@@ -20,5 +20,6 @@ pub fn evaluate(board: &Board) -> i32 {
     white - black
 }
 
-pub const MATE: i32 = 1_000_000;
+pub const MATE: i32 = INF;
 pub const REMIS: i32 = 0;
+pub const INF: i32 = 1_000_000;

@@ -132,11 +132,12 @@ impl Engine {
         let mut best_move = None;
         let mut best_score = i32::MIN;
         self.nodes = 0;
+        self.pv_len.fill(0);
 
         for mv in self.board.generate_moves() {
             let undo = self.board.make_move(mv);
 
-            let score = -self.negamax(depth - 1, 1);
+            let score = -self.negamax(depth - 1, -eval::INF, eval::INF, 1);
 
             if score > best_score {
                 best_score = score;
@@ -159,7 +160,7 @@ impl Engine {
         (best_move, best_score)
     }
 
-    fn negamax(&mut self, depth: usize, ply: usize) -> i32 {
+    fn negamax(&mut self, depth: usize, mut alpha: i32, beta: i32, ply: usize) -> i32 {
         let moves = self.board.generate_moves();
 
         self.nodes += 1;
@@ -184,7 +185,7 @@ impl Engine {
         for mv in moves {
             let undo = self.board.make_move(mv);
 
-            let score = -self.negamax(depth - 1, ply + 1);
+            let score = -self.negamax(depth - 1, -beta, -alpha, ply + 1);
 
             if score > max_score {
                 max_score = score;
@@ -201,6 +202,12 @@ impl Engine {
             }
 
             self.board.unmake_move(undo);
+
+            alpha = alpha.max(score);
+
+            if alpha >= beta {
+                break;
+            }
         }
 
         max_score
