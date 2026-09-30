@@ -774,6 +774,7 @@ impl Board {
                 });
             }
 
+            // capture toward increasing file
             let mut targets = ((pawns & NOT_H_FILE) >> 7) & enemy;
 
             while targets != 0 {
@@ -801,6 +802,7 @@ impl Board {
                 }
             }
 
+            // capture toward decreasing file
             let mut targets = ((pawns & NOT_A_FILE) >> 9) & enemy;
 
             while targets != 0 {
@@ -856,7 +858,7 @@ impl Board {
                 return true;
             }
 
-            if !turn && !self.is_square_attacked(E8, false) && !self.is_square_attacked(F8, false) && !self.is_square_attacked(G8, false) {
+            if !turn && !self.is_square_attacked(E8, true) && !self.is_square_attacked(F8, true) && !self.is_square_attacked(G8, true) {
                 return true;
             }
         } else if undo.mv.move_type == MoveType::CastleQueenSide {
@@ -864,7 +866,7 @@ impl Board {
                 return true;
             }
 
-            if !turn && !self.is_square_attacked(E8, false) && !self.is_square_attacked(D8, false) && !self.is_square_attacked(C8, false) {
+            if !turn && !self.is_square_attacked(E8, true) && !self.is_square_attacked(D8, true) && !self.is_square_attacked(C8, true) {
                 return true;
             }
         }
