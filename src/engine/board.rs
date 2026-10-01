@@ -1,3 +1,5 @@
+use crate::engine::board::MoveType::Quiet;
+
 use super::super::attacks::*;
 
 pub const A1: u8 = 0;
@@ -45,6 +47,8 @@ const RANK_7: u64 = 0x00ff_0000_0000_0000;
 const RANK_8: u64 = 0xff00_0000_0000_0000;
 const RANK_1: u64 = 0x0000_0000_0000_00ff;
 
+const MAX_MOVES: usize = 256;
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Board {
     pieces: [u64; 12],
@@ -78,6 +82,10 @@ pub struct Move {
     pub promotion: Option<usize>,
 }
 
+impl Move {
+    pub const NONE: Self = Move {from: 0, to: 0, move_type: Quiet, promotion: None};
+}
+
 impl std::fmt::Display for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(format!("{}{}{}", str_from_square(self.from), str_from_square(self.to), if self.move_type == MoveType::Promotion || self.move_type == MoveType::PromotionCapture {match self.promotion.unwrap() {
@@ -101,6 +109,47 @@ pub struct Undo {
     pub en_passant: Option<u8>,
 
     pub mv: Move,
+}
+
+pub struct MoveArray {
+    moves: [Move; MAX_MOVES],
+    len: usize
+}
+
+impl MoveArray {
+    pub fn new() -> Self {
+        Self {
+            moves: [Move::NONE; MAX_MOVES],
+            len: 0
+        }
+    }
+
+    pub fn add_element(&mut self, mv: Move) {
+        if self.len >= MAX_MOVES {
+            panic!("not enough capacity");
+        }
+
+        self.moves[self.len] = mv;
+
+        self.len += 1;
+    }
+
+    pub fn empty(&mut self) {
+        self.len = 0;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<'a> IntoIterator for &'a MoveArray {
+    type Item = &'a Move;
+    type IntoIter = core::slice::Iter<'a, Move>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.moves[..self.len].iter()
+    }
 }
 
 impl Board {
@@ -414,9 +463,7 @@ impl Board {
         None
     }
 
-    fn generate_pseudo_legal_moves(&self) -> Vec<Move> {
-        let mut ret = Vec::<Move>::new();
-
+    fn generate_pseudo_legal_moves(&self, mv_arr: &mut MoveArray) {
         let own = if self.turn {
             self.white_occ
         } else {
@@ -449,7 +496,7 @@ impl Board {
                     MoveType::Quiet
                 };
 
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from,
                     to,
                     move_type,
@@ -478,7 +525,7 @@ impl Board {
                     MoveType::Quiet
                 };
 
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from,
                     to,
                     move_type,
@@ -505,7 +552,7 @@ impl Board {
                     MoveType::Quiet
                 };
 
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from,
                     to,
                     move_type,
@@ -532,7 +579,7 @@ impl Board {
                     MoveType::Quiet
                 };
 
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from,
                     to,
                     move_type,
@@ -559,7 +606,7 @@ impl Board {
                     MoveType::Quiet
                 };
 
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from,
                     to,
                     move_type,
@@ -571,7 +618,7 @@ impl Board {
         if self.turn {
             if self.castling & WK_CASTLE != 0 && self.occupancy & ((1u64 << F1) | (1u64 << G1)) == 0
             {
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from: E1,
                     to: G1,
                     move_type: MoveType::CastleKingSide,
@@ -582,7 +629,7 @@ impl Board {
             if self.castling & WQ_CASTLE != 0
                 && self.occupancy & ((1u64 << B1) | (1u64 << C1) | (1u64 << D1)) == 0
             {
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from: E1,
                     to: C1,
                     move_type: MoveType::CastleQueenSide,
@@ -592,7 +639,7 @@ impl Board {
         } else {
             if self.castling & BK_CASTLE != 0 && self.occupancy & ((1u64 << F8) | (1u64 << G8)) == 0
             {
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from: E8,
                     to: G8,
                     move_type: MoveType::CastleKingSide,
@@ -603,7 +650,7 @@ impl Board {
             if self.castling & BQ_CASTLE != 0
                 && self.occupancy & ((1u64 << B8) | (1u64 << C8) | (1u64 << D8)) == 0
             {
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from: E8,
                     to: C8,
                     move_type: MoveType::CastleQueenSide,
@@ -626,7 +673,7 @@ impl Board {
 
                 if to >= 56 {
                     for promotion in [WQ, WR, WB, WN] {
-                        ret.push(Move {
+                        mv_arr.add_element(Move {
                             from,
                             to,
                             move_type: MoveType::Promotion,
@@ -634,7 +681,7 @@ impl Board {
                         });
                     }
                 } else {
-                    ret.push(Move {
+                    mv_arr.add_element(Move {
                         from,
                         to,
                         move_type: MoveType::Quiet,
@@ -650,7 +697,7 @@ impl Board {
                 let to = targets.trailing_zeros() as u8;
                 targets &= targets - 1;
 
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from: to - 16,
                     to,
                     move_type: MoveType::DoublePawnPush,
@@ -668,7 +715,7 @@ impl Board {
 
                 if to >= 56 {
                     for promotion in [WQ, WR, WB, WN] {
-                        ret.push(Move {
+                        mv_arr.add_element(Move {
                             from,
                             to,
                             move_type: MoveType::PromotionCapture,
@@ -676,7 +723,7 @@ impl Board {
                         });
                     }
                 } else {
-                    ret.push(Move {
+                    mv_arr.add_element(Move {
                         from,
                         to,
                         move_type: MoveType::Capture,
@@ -695,7 +742,7 @@ impl Board {
 
                 if to >= 56 {
                     for promotion in [WQ, WR, WB, WN] {
-                        ret.push(Move {
+                        mv_arr.add_element(Move {
                             from,
                             to,
                             move_type: MoveType::PromotionCapture,
@@ -703,7 +750,7 @@ impl Board {
                         });
                     }
                 } else {
-                    ret.push(Move {
+                    mv_arr.add_element(Move {
                         from,
                         to,
                         move_type: MoveType::Capture,
@@ -721,7 +768,7 @@ impl Board {
                     let from = attackers.trailing_zeros() as u8;
                     attackers &= attackers - 1;
 
-                    ret.push(Move {
+                    mv_arr.add_element(Move {
                         from,
                         to: ep,
                         move_type: MoveType::EnPassant,
@@ -743,7 +790,7 @@ impl Board {
 
                 if to < 8 {
                     for promotion in [BQ, BR, BB, BN] {
-                        ret.push(Move {
+                        mv_arr.add_element(Move {
                             from,
                             to,
                             move_type: MoveType::Promotion,
@@ -751,7 +798,7 @@ impl Board {
                         });
                     }
                 } else {
-                    ret.push(Move {
+                    mv_arr.add_element(Move {
                         from,
                         to,
                         move_type: MoveType::Quiet,
@@ -766,7 +813,7 @@ impl Board {
                 let to = targets.trailing_zeros() as u8;
                 targets &= targets - 1;
 
-                ret.push(Move {
+                mv_arr.add_element(Move {
                     from: to + 16,
                     to,
                     move_type: MoveType::DoublePawnPush,
@@ -785,7 +832,7 @@ impl Board {
 
                 if to < 8 {
                     for promotion in [BQ, BR, BB, BN] {
-                        ret.push(Move {
+                        mv_arr.add_element(Move {
                             from,
                             to,
                             move_type: MoveType::PromotionCapture,
@@ -793,7 +840,7 @@ impl Board {
                         });
                     }
                 } else {
-                    ret.push(Move {
+                    mv_arr.add_element(Move {
                         from,
                         to,
                         move_type: MoveType::Capture,
@@ -813,7 +860,7 @@ impl Board {
 
                 if to < 8 {
                     for promotion in [BQ, BR, BB, BN] {
-                        ret.push(Move {
+                        mv_arr.add_element(Move {
                             from,
                             to,
                             move_type: MoveType::PromotionCapture,
@@ -821,7 +868,7 @@ impl Board {
                         });
                     }
                 } else {
-                    ret.push(Move {
+                    mv_arr.add_element(Move {
                         from,
                         to,
                         move_type: MoveType::Capture,
@@ -839,7 +886,7 @@ impl Board {
                     let from = attackers.trailing_zeros() as u8;
                     attackers &= attackers - 1;
 
-                    ret.push(Move {
+                    mv_arr.add_element(Move {
                         from,
                         to: ep,
                         move_type: MoveType::EnPassant,
@@ -848,8 +895,6 @@ impl Board {
                 }
             }
         }
-
-        ret
     }
 
     fn check_castle(&self, undo: Undo, turn: bool) -> bool {
@@ -874,22 +919,20 @@ impl Board {
         false
     }
 
-    pub fn generate_moves(&mut self) -> Vec<Move> {
-        let pseudo_legal = self.generate_pseudo_legal_moves();
+    pub fn generate_moves(&mut self, mv_arr: &mut MoveArray) {
+        let mut pseudo_legal = MoveArray::new();
+        self.generate_pseudo_legal_moves(&mut pseudo_legal);
         //println!("{:#?}", pseudo_legal);
-        let mut legal = Vec::<Move>::new();
 
-        for mv in pseudo_legal {
-            let undo = self.make_move(mv);
+        for mv in &pseudo_legal {
+            let undo = self.make_move(*mv);
 
             if !self.is_in_check(!self.turn) && {if undo.mv.move_type == MoveType::CastleKingSide || undo.mv.move_type == MoveType::CastleQueenSide {self.check_castle(undo, !self.turn)} else {true}} {
-                legal.push(mv);
+                mv_arr.add_element(*mv);
             }
 
             self.unmake_move(undo);
         }
-
-        legal
     }
 
     pub fn is_in_check(&self, white: bool) -> bool {

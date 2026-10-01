@@ -63,9 +63,6 @@ pub fn run() {
                         _ => engine.go_depth(5),
                     }
                 }
-                else {
-                    engine.random_move();
-                }
             }
             "quit" => {
                 break;

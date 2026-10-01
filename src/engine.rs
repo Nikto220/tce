@@ -28,7 +28,7 @@ impl Engine {
             board: Board::new(),
             nodes: 0,
             pv: [[None; MAX_DEPTH]; MAX_DEPTH],
-            pv_len: [0; MAX_DEPTH],
+            pv_len: [0; MAX_DEPTH]
         }
     }
 
@@ -46,13 +46,6 @@ impl Engine {
 
     pub fn position_fen(&mut self, fen: &[&str]) {
         self.board.position_fen(fen);
-    }
-
-    pub fn random_move(&mut self) {
-        let moves = self.board.generate_moves();
-        if moves.is_empty() {return;}
-        let mv = moves[rand::random_range(..moves.len())];
-        println!("bestmove {}", mv);
     }
 
     pub fn go_depth(&mut self, depth: usize) {
@@ -133,12 +126,13 @@ impl Engine {
             return 1;
         }
 
-        let moves = self.board.generate_moves();
+        let mut moves = MoveArray::new();
+        self.board.generate_moves(&mut moves);
 
         let mut nodes = 0;
 
-        for mv in moves {
-            let undo = self.board.make_move(mv);
+        for mv in &moves {
+            let undo = self.board.make_move(*mv);
 
             nodes += self.perft(depth - 1);
 
@@ -149,12 +143,13 @@ impl Engine {
     }
 
     pub fn perft_divide(&mut self, depth: usize) {
-        let moves = self.board.generate_moves();
+        let mut moves = MoveArray::new();
+        self.board.generate_moves(&mut moves);
 
         let mut total = 0u64;
 
-        for mv in moves {
-            let undo = self.board.make_move(mv);
+        for mv in &moves {
+            let undo = self.board.make_move(*mv);
 
             let nodes = self.perft(depth - 1);
 
@@ -176,8 +171,11 @@ impl Engine {
         self.nodes = 0;
         self.pv_len.fill(0);
 
-        for mv in self.board.generate_moves() {
-            let undo = self.board.make_move(mv);
+        let mut moves = MoveArray::new();
+        self.board.generate_moves(&mut moves);
+
+        for mv in &moves {
+            let undo = self.board.make_move(*mv);
 
             let score = -self.negamax(
                 depth - 1,
@@ -190,9 +188,9 @@ impl Engine {
 
             if score > best_score {
                 best_score = score;
-                best_move = Some(mv);
+                best_move = Some(*mv);
 
-                self.pv[0][0] = Some(mv);
+                self.pv[0][0] = Some(*mv);
 
                 let child_len = self.pv_len[1];
 
@@ -213,7 +211,8 @@ impl Engine {
     fn negamax(&mut self, depth: usize, mut alpha: i32, beta: i32, ply: usize) -> i32 {
         self.pv_len[ply] = 0;
 
-        let moves = self.board.generate_moves();
+        let mut moves = MoveArray::new();
+        self.board.generate_moves(&mut moves);
 
         self.nodes += 1;
 
@@ -234,15 +233,15 @@ impl Engine {
 
         let mut max_score = i32::MIN;
 
-        for mv in moves {
-            let undo = self.board.make_move(mv);
+        for mv in &moves {
+            let undo = self.board.make_move(*mv);
 
             let score = -self.negamax(depth - 1, -beta, -alpha, ply + 1);
 
             if score > max_score {
                 max_score = score;
 
-                self.pv[ply][0] = Some(mv);
+                self.pv[ply][0] = Some(*mv);
 
                 let child_len = self.pv_len[ply + 1];
 
