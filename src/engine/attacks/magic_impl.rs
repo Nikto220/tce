@@ -222,7 +222,6 @@ mod tests {
         *x
     }
 
-
     #[test]
     fn magic_sliders_match_slow() {
         let mut s = 0x9E3779B97F4A7C15u64;

@@ -51,15 +51,19 @@ pub fn run() {
                 if tokens.len() > 1 {
                     match tokens[1] {
                         "depth" => {
-                            if tokens.len() > 2 && let Ok(num) = tokens[2].parse::<usize>() {
+                            if tokens.len() > 2
+                                && let Ok(num) = tokens[2].parse::<usize>()
+                            {
                                 engine.go_depth(num);
                             }
-                        },
+                        }
                         "perft" => {
-                            if tokens.len() > 2 && let Ok(num) = tokens[2].parse::<usize>() {
+                            if tokens.len() > 2
+                                && let Ok(num) = tokens[2].parse::<usize>()
+                            {
                                 engine.perft_divide(num);
                             }
-                        },
+                        }
                         _ => engine.go_depth(5),
                     }
                 }

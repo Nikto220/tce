@@ -99,7 +99,10 @@ fn xorshift64(mut x: u64) -> u64 {
 fn find_magic(sq: usize, mask: u64, bits: u32, dirs: &[(i32, i32); 4], seed: &mut u64) -> u64 {
     let n = 1usize << bits;
     let occs: Vec<u64> = (0..n as u64).map(|i| pdep(i, mask)).collect();
-    let attacks: Vec<u64> = occs.iter().map(|&o| slow_attacks_const(sq, o, dirs)).collect();
+    let attacks: Vec<u64> = occs
+        .iter()
+        .map(|&o| slow_attacks_const(sq, o, dirs))
+        .collect();
 
     loop {
         *seed = xorshift64(*seed);
@@ -122,7 +125,10 @@ fn find_magic(sq: usize, mask: u64, bits: u32, dirs: &[(i32, i32); 4], seed: &mu
             match used[idx] {
                 None => used[idx] = Some(attacks[i]),
                 Some(a) if a == attacks[i] => {} // constructive collision, fine
-                Some(_) => { ok = false; break; }
+                Some(_) => {
+                    ok = false;
+                    break;
+                }
             }
         }
         if ok {

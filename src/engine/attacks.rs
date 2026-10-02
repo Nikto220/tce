@@ -182,11 +182,10 @@ mod pext_impl;
 mod magic_impl;
 
 #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
-pub use pext_impl::{rook_attacks, bishop_attacks, queen_attacks};
+pub use pext_impl::{bishop_attacks, queen_attacks, rook_attacks};
 
 #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
-pub use magic_impl::{rook_attacks, bishop_attacks, queen_attacks};
-
+pub use magic_impl::{bishop_attacks, queen_attacks, rook_attacks};
 
 /// Software PDEP: deposits the low bits of `src` into the set-bit positions of `mask`.
 /// Only used at compile time to build the tables.

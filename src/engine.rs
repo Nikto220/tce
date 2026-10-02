@@ -28,7 +28,7 @@ impl Engine {
             board: Board::new(),
             nodes: 0,
             pv: [[None; MAX_DEPTH]; MAX_DEPTH],
-            pv_len: [0; MAX_DEPTH]
+            pv_len: [0; MAX_DEPTH],
         }
     }
 
@@ -62,7 +62,6 @@ impl Engine {
             } else {
                 0
             };
-
 
             if score >= eval::MATE - (i + 1) as i32 {
                 let mate_ply = eval::MATE - score;
@@ -148,6 +147,8 @@ impl Engine {
 
         let mut total = 0u64;
 
+        let time = Instant::now();
+
         for mv in &moves {
             let undo = self.board.make_move(*mv);
 
@@ -161,8 +162,8 @@ impl Engine {
         }
 
         println!("\nNodes searched: {}", total);
+        println!("Time: {} ms", time.elapsed().as_millis());
     }
-
 
     fn search(&mut self, depth: usize) -> (Option<Move>, i32) {
         let mut best_move = None;
@@ -177,12 +178,7 @@ impl Engine {
         for mv in &moves {
             let undo = self.board.make_move(*mv);
 
-            let score = -self.negamax(
-                depth - 1,
-                -eval::INF,
-                -alpha,
-                1,
-            );
+            let score = -self.negamax(depth - 1, -eval::INF, -alpha, 1);
 
             self.board.unmake_move(undo);
 
@@ -206,7 +202,6 @@ impl Engine {
 
         (best_move, best_score)
     }
-
 
     fn negamax(&mut self, depth: usize, mut alpha: i32, beta: i32, ply: usize) -> i32 {
         self.pv_len[ply] = 0;
