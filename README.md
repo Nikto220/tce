@@ -5,6 +5,8 @@
 <br />
 
 [![Current Crates.io Version](https://img.shields.io/crates/v/tce.svg)](https://crates.io/crates/tce)
+[![GitHub Release](https://img.shields.io/github/v/release/Nikto220/tce?logo=github&color=097BBC)](https://github.com/Nikto220/tce/releases/latest)
+[![GitHub Release](https://img.shields.io/github/v/release/Nikto220/tce?include_prereleases&label=pre-release&logo=github)](https://github.com/Nikto220/tce/releases)
 ![license](https://shields.io/badge/license-MIT%2FApache--2.0-blue)
 <br />
 
