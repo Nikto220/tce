@@ -3,3 +3,4 @@
 build.ps1
 /python/nnue/.venv
 /python/nnue/src/nnue/__pycache__
+/python/nnue/src/pgn_to_fen/__pycache__
