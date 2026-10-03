@@ -1,0 +1,28 @@
+[project]
+name = "nnue"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Nikto220", email = "l.kot@azailowa.pozytywneinicjatywy.pl" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.2",
+    "torch>=2.14.1",
+]
+
+[project.scripts]
+nnue = "nnue.train:main"
+pgn-to-fen = "pgn_to_fen.main:main"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+torch = { index = "pytorch-xpu" }
+
+[[tool.uv.index]]
+name = "pytorch-xpu"
+url = "https://download.pytorch.org/whl/xpu"

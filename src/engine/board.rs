@@ -1,3 +1,5 @@
+use crate::engine::eval;
+
 use super::super::attacks::*;
 
 pub const A1: u8 = 0;
@@ -146,6 +148,8 @@ pub struct Undo {
     pub captured_piece: Option<usize>,
     pub captured_square: Option<u8>,
 
+    pub moved_piece: usize,
+
     pub castling: u8,
     pub en_passant: Option<u8>,
 
@@ -270,8 +274,11 @@ impl Board {
     }
 
     pub fn make_move(&mut self, mv: Move) -> Undo {
+        let piece = self.piece_at(mv.from).expect("Brak figury na polu from");
+
         let mut undo = Undo {
             mv,
+            moved_piece: piece,
             captured_piece: None,
             captured_square: None,
             castling: self.castling,
@@ -279,8 +286,6 @@ impl Board {
         };
 
         //println!("{:#?}", mv);
-
-        let piece = self.piece_at(mv.from).expect("Brak figury na polu from");
 
         // --------------------------------------------------
         // 1. BICIE

@@ -1,3 +1,5 @@
 /target
 /.cargo
 build.ps1
+/python/nnue/.venv
+/python/nnue/src/nnue/__pycache__

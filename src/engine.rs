@@ -17,35 +17,80 @@ pub struct Engine {
     config: Config,
     board: Board,
     nodes: u64,
-    pv: [[Option<Move>; MAX_DEPTH]; MAX_DEPTH],
+    pv: Vec<[Option<Move>; MAX_DEPTH]>,
     pv_len: [usize; MAX_DEPTH],
+    acc: Vec<eval::Accumulator>,
+    nnue: Box<eval::Nnue>
 }
 
 impl Engine {
     pub fn new(config: Config) -> Self {
-        Self {
+        let nnue = eval::Nnue::from_bytes(include_bytes!("../nnue.bin"));
+        let mut engine = Self {
             config,
             board: Board::new(),
+            acc: vec![eval::Accumulator::new(&nnue); MAX_DEPTH + 1],
+            nnue,
             nodes: 0,
-            pv: [[None; MAX_DEPTH]; MAX_DEPTH],
+            pv: vec![[None; MAX_DEPTH]; MAX_DEPTH],
             pv_len: [0; MAX_DEPTH],
+        };
+        engine.refresh_acc();
+        engine
+    }
+
+    /// Full rebuild from the board; the only place that loops over all pieces.
+    fn fresh_acc(&self) -> eval::Accumulator {
+        let mut acc = eval::Accumulator::new(&self.nnue);
+        let pieces = self.board.get_board();
+        for piece in 0..12 {
+            let mut bb = pieces[piece];
+            while bb != 0 {
+                let sq = bb.trailing_zeros() as usize;
+                bb &= bb - 1;
+                acc.add(&self.nnue, piece / 6, piece % 6, sq);
+            }
         }
+        acc
+    }
+
+    fn refresh_acc(&mut self) {
+        self.acc[0] = self.fresh_acc();
+    }
+
+    /// make_move + accumulator update for the child at ply + 1.
+    fn make(&mut self, mv: Move, ply: usize) -> Undo {
+        let undo = self.board.make_move(mv);
+        self.acc[ply + 1] = self.acc[ply];
+        update_acc(&mut self.acc[ply + 1], &self.nnue, &undo);
+
+        #[cfg(debug_assertions)]
+        assert!(
+            self.fresh_acc() == self.acc[ply + 1],
+            "NNUE accumulator mismatch after {mv}"
+        );
+
+        undo
     }
 
     pub fn newgame(&mut self) {
         self.board = Board::new();
+        self.refresh_acc();
     }
 
     pub fn position_startpos(&mut self) {
         self.board.position_startpos();
+        self.refresh_acc();
     }
 
     pub fn position_startpos_moves(&mut self, moves: &[&str]) {
         self.board.position_startpos_moves(moves);
+        self.refresh_acc();
     }
 
     pub fn position_fen(&mut self, fen: &[&str]) {
         self.board.position_fen(fen);
+        self.refresh_acc();
     }
 
     pub fn go_depth(&mut self, depth: usize) {
@@ -120,6 +165,10 @@ impl Engine {
         println!("bestmove {}", bestmove.unwrap());
     }
 
+    pub fn eval(&self) -> i32 {
+        return self.nnue.evaluate(&self.acc[0], self.board.get_turn());
+    }
+
     fn perft(&mut self, depth: usize) -> u64 {
         if depth == 0 {
             return 1;
@@ -180,7 +229,7 @@ impl Engine {
         self.board.generate_moves(&mut moves);
 
         for mv in &moves {
-            let undo = self.board.make_move(*mv);
+            let undo = self.make(*mv, 0);
 
             let score = -self.negamax(depth - 1, -eval::INF, -alpha, 1);
 
@@ -224,16 +273,13 @@ impl Engine {
         }
 
         if depth == 0 {
-            return match self.board.get_turn() {
-                true => eval::evaluate(&self.board),
-                false => -eval::evaluate(&self.board),
-            };
+            return self.nnue.evaluate(&self.acc[ply], self.board.get_turn());
         }
 
         let mut max_score = i32::MIN;
 
         for mv in &moves {
-            let undo = self.board.make_move(*mv);
+            let undo = self.make(*mv, ply);
 
             let score = -self.negamax(depth - 1, -beta, -alpha, ply + 1);
 
@@ -267,5 +313,36 @@ impl Engine {
 impl Config {
     pub fn new(threads: usize) -> Self {
         Self { threads }
+    }
+}
+
+fn update_acc(acc: &mut eval::Accumulator, net: &eval::Nnue, undo: &Undo) {
+    let mv = undo.mv;
+    let piece = undo.moved_piece;
+    let (from, to) = (mv.from as usize, mv.to as usize);
+
+    acc.sub(net, piece / 6, piece % 6, from);
+
+    let placed = match mv.move_type {
+        MoveType::Promotion | MoveType::PromotionCapture => mv.promotion.unwrap(),
+        _ => piece,
+    };
+    acc.add(net, placed / 6, placed % 6, to);
+
+    if let (Some(cap), Some(sq)) = (undo.captured_piece, undo.captured_square) {
+        acc.sub(net, cap / 6, cap % 6, sq as usize);
+    }
+
+    // Castling also moves the rook (piece type 3).
+    match mv.move_type {
+        MoveType::CastleKingSide => {
+            acc.sub(net, piece / 6, 3, to + 1);
+            acc.add(net, piece / 6, 3, to - 1);
+        }
+        MoveType::CastleQueenSide => {
+            acc.sub(net, piece / 6, 3, to - 2);
+            acc.add(net, piece / 6, 3, to + 1);
+        }
+        _ => {}
     }
 }

@@ -67,7 +67,10 @@ pub fn run() {
                         _ => engine.go_depth(5),
                     }
                 }
-            }
+            },
+            "eval" => {
+                println!("info score cp {}", engine.eval());
+            },
             "quit" => {
                 break;
             }
