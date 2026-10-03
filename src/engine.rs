@@ -128,6 +128,10 @@ impl Engine {
         let mut moves = MoveArray::new();
         self.board.generate_moves(&mut moves);
 
+        if depth == 1 {
+            return moves.len() as u64;
+        }
+
         let mut nodes = 0;
 
         for mv in &moves {

@@ -182,6 +182,10 @@ impl MoveArray {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
 }
 
 impl<'a> IntoIterator for &'a MoveArray {
@@ -1846,8 +1850,9 @@ impl Board {
     }
 
     pub fn position_fen(&mut self, fen: &[&str]) {
-        if fen.len() != 6 {
-            panic!("Invalid FEN: expected 6 fields, got {}", fen.len());
+        if fen.len() != 6 && fen.len() != 4 {
+            println!("info string Invalid FEN!");
+            return;
         }
 
         let board_fen = fen[0];
@@ -1865,7 +1870,8 @@ impl Board {
             match c {
                 '/' => {
                     if file != 8 {
-                        panic!("Invalid FEN: rank is not 8 squares");
+                        println!("info string Invalid FEN: rank is not 8 squares");
+                        return;
                     }
 
                     rank -= 1;
@@ -1878,13 +1884,15 @@ impl Board {
                     file += empty;
 
                     if file > 8 {
-                        panic!("Invalid FEN: too many squares in rank");
+                        println!("info string Invalid FEN: too many squares in rank");
+                        return;
                     }
                 }
 
                 'P' | 'N' | 'B' | 'R' | 'Q' | 'K' | 'p' | 'n' | 'b' | 'r' | 'q' | 'k' => {
                     if rank < 0 || file >= 8 {
-                        panic!("Invalid FEN board");
+                        println!("info string Invalid FEN board");
+                        return;
                     }
 
                     let square = (rank * 8 + file) as u8;
@@ -1948,13 +1956,15 @@ impl Board {
                 }
 
                 _ => {
-                    panic!("Invalid FEN piece: {}", c);
+                    println!("info string Invalid FEN piece: {}", c);
+                    return;
                 }
             }
         }
 
         if rank != 0 || file != 8 {
-            panic!("Invalid FEN board");
+            println!("info string Invalid FEN board");
+            return;
         }
 
         // --------------------------------------------------
@@ -1964,7 +1974,10 @@ impl Board {
         let turn = match side_to_move {
             "w" => true,
             "b" => false,
-            _ => panic!("Invalid FEN side to move"),
+            _ => {
+                println!("Invalid FEN side to move");
+                return;
+            },
         };
 
         // --------------------------------------------------
