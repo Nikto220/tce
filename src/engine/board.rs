@@ -1429,8 +1429,7 @@ impl Board {
                             pinned |= 1u64 << pinned_sq;
 
                             // The pinned piece can only move along this ray.
-                            pin_rays[pinned_sq as usize] =
-                                between(king_sq, sq) | (1u64 << sq);
+                            pin_rays[pinned_sq as usize] = between(king_sq, sq) | (1u64 << sq);
                         }
 
                         break;
@@ -1982,7 +1981,7 @@ impl Board {
             _ => {
                 println!("Invalid FEN side to move");
                 return;
-            },
+            }
         };
 
         // --------------------------------------------------

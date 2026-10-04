@@ -1,0 +1,17 @@
+[package]
+name = "nnue"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "fastdata"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.29.3", features = ["extension-module"] }
+numpy = "0.29"
+rand = "*"
+memmap2 = "0.9.11"
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+libc = "0.2"

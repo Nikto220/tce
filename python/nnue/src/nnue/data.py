@@ -1,21 +1,33 @@
-import numpy as np
-import torch
+from .fastdata import iter_batches
 
-from .features import features
+def prefetch(it, depth=4):
+    import queue
+    import threading
 
+    q = queue.Queue(maxsize=depth)
+    done = object()
 
-def load_data(path: str):
-    """Each line: FEN | score_cp (white POV) | result (1 / 0.5 / 0, white POV)."""
-    idx, score, result = [], [], []
-    with open(path) as f:
-        for line in f:
-            fen, cp, res = (x.strip() for x in line.split("|"))
-            us, them, white = features(fen)
-            idx.append([us, them])
-            score.append(float(cp) if white else -float(cp))
-            result.append(float(res) if white else 1 - float(res))
-    return (
-        torch.from_numpy(np.array(idx, dtype=np.int16)),  # int16 keeps RAM low
-        torch.tensor(score, dtype=torch.float32),
-        torch.tensor(result, dtype=torch.float32),
-    )
+    def worker():
+        try:
+            for item in it:
+                q.put(item)
+            q.put(done)
+        except BaseException as e:
+            q.put(e)
+
+    threading.Thread(
+        target=worker,
+        daemon=True,
+    ).start()
+
+    while True:
+        item = q.get()
+
+        if item is done:
+            return
+
+        if isinstance(item, BaseException):
+            raise item
+
+        yield item
+

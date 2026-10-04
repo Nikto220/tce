@@ -3,4 +3,7 @@
 build.ps1
 /python/nnue/.venv
 /python/nnue/src/nnue/__pycache__
-/python/nnue/src/pgn_to_fen/__pycache__
+/python/nnue/src/nnue/*.pyd
+/python/nnue/src/nnue/*.pyc
+/python/nnue/data
+/python/nnue/target

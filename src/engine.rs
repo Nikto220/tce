@@ -20,7 +20,7 @@ pub struct Engine {
     pv: Vec<[Option<Move>; MAX_DEPTH]>,
     pv_len: [usize; MAX_DEPTH],
     acc: Vec<eval::Accumulator>,
-    nnue: Box<eval::Nnue>
+    nnue: Box<eval::Nnue>,
 }
 
 impl Engine {
@@ -146,7 +146,7 @@ impl Engine {
                 println!();
             } else {
                 print!(
-                    "info depth {} score cp {}, nodes {} nps {} time {} pv ",
+                    "info depth {} score cp {} nodes {} nps {} time {} pv ",
                     i + 1,
                     score,
                     self.nodes,
