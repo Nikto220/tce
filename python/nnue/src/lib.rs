@@ -27,6 +27,8 @@ const FLAG_WHITE_TO_MOVE: u8 = 1;
 
 const MAX_ACTIVE: usize = 32;
 
+const PAD: i16 = 768;
+
 struct Dataset {
     mmap: Mmap,
     count: usize,
@@ -140,8 +142,8 @@ fn decode_v2_record(record: &[u8]) -> ([i16; 64], i16, f32, f32) {
     let flags = record[FLAGS_OFFSET];
     let white_to_move = flags & FLAG_WHITE_TO_MOVE != 0;
 
-    let mut us = [768i16; MAX_ACTIVE];
-    let mut them = [768i16; MAX_ACTIVE];
+    let mut us = [PAD; MAX_ACTIVE];
+    let mut them = [PAD; MAX_ACTIVE];
 
     let mut n = 0usize;
     let mut occupied = occupancy;
@@ -194,11 +196,11 @@ fn decode_v2_record(record: &[u8]) -> ([i16; 64], i16, f32, f32) {
     us[..n].sort_unstable();
     them[..n].sort_unstable();
 
-    let mut idx = [0i16; 64];
+    let mut idx = [PAD; 64];
     idx[..32].copy_from_slice(&us);
     idx[32..64].copy_from_slice(&them);
 
-    let result = result_code as f32;
+    let result = result_code as f32 * 0.5;
 
     (
         idx,
