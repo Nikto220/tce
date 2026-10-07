@@ -98,7 +98,7 @@ pub enum MoveType {
     PromotionCapture,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Move {
     pub from: u8,
     pub to: u8,
@@ -189,6 +189,25 @@ impl MoveArray {
 
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn swap(&mut self, i1: usize, i2: usize) {
+        let temp = self.moves[i1];
+        self.moves[i1] = self.moves[i2];
+        self.moves[i2] = temp;
+    }
+
+    pub fn order_pv_move(&mut self, pv_move: Option<Move>) {
+        let Some(pv_move) = pv_move else {
+            return;
+        };
+
+        for i in 0..self.len() {
+            if self.moves[i] == pv_move {
+                self.swap(0, i);
+                return;
+            }
+        }
     }
 }
 

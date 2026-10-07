@@ -19,6 +19,8 @@ pub struct Engine {
     nodes: u64,
     pv: Vec<[Option<Move>; MAX_DEPTH]>,
     pv_len: [usize; MAX_DEPTH],
+    prev_pv: Vec<[Option<Move>; MAX_DEPTH]>,
+    prev_pv_len: [usize; MAX_DEPTH],
     acc: Vec<eval::Accumulator>,
     nnue: Box<eval::Nnue>,
 }
@@ -34,6 +36,8 @@ impl Engine {
             nodes: 0,
             pv: vec![[None; MAX_DEPTH]; MAX_DEPTH],
             pv_len: [0; MAX_DEPTH],
+            prev_pv: vec![[None; MAX_DEPTH]; MAX_DEPTH],
+            prev_pv_len: [0; MAX_DEPTH]
         };
         engine.refresh_acc();
         engine
@@ -223,10 +227,23 @@ impl Engine {
         let mut best_score = -eval::INF;
         let mut alpha = -eval::INF;
         self.nodes = 0;
+
+        self.prev_pv = self.pv.clone();
+        self.prev_pv_len = self.pv_len;
+
         self.pv_len.fill(0);
 
         let mut moves = MoveArray::new();
         self.board.generate_moves(&mut moves);
+
+        // Previous iteration's best root move goes first.
+        let pv_move = if self.prev_pv_len[0] > 0 {
+            self.prev_pv[0][0]
+        } else {
+            None
+        };
+
+        moves.order_pv_move(pv_move);
 
         for mv in &moves {
             let undo = self.make(*mv, 0);
@@ -276,15 +293,21 @@ impl Engine {
             return self.nnue.evaluate(&self.acc[ply], self.board.get_turn());
         }
 
-        let mut max_score = i32::MIN;
+        let pv_move = if self.prev_pv_len[ply] > 0 {
+            self.prev_pv[ply][0]
+        } else {
+            None
+        };
+
+        moves.order_pv_move(pv_move);
 
         for mv in &moves {
             let undo = self.make(*mv, ply);
 
             let score = -self.negamax(depth - 1, -beta, -alpha, ply + 1);
 
-            if score > max_score {
-                max_score = score;
+            if score > alpha {
+                alpha = score;
 
                 self.pv[ply][0] = Some(*mv);
 
@@ -306,7 +329,7 @@ impl Engine {
             }
         }
 
-        max_score
+        alpha
     }
 }
 
