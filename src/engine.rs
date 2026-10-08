@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 pub mod board;
 use board::*;
@@ -23,6 +23,8 @@ pub struct Engine {
     prev_pv_len: [usize; MAX_DEPTH],
     acc: Vec<eval::Accumulator>,
     nnue: Box<eval::Nnue>,
+    start: Instant,
+    time: Duration
 }
 
 impl Engine {
@@ -37,7 +39,9 @@ impl Engine {
             pv: vec![[None; MAX_DEPTH]; MAX_DEPTH],
             pv_len: [0; MAX_DEPTH],
             prev_pv: vec![[None; MAX_DEPTH]; MAX_DEPTH],
-            prev_pv_len: [0; MAX_DEPTH]
+            prev_pv_len: [0; MAX_DEPTH],
+            start: Instant::now(),
+            time: Duration::new(0, 0)
         };
         engine.refresh_acc();
         engine
@@ -97,15 +101,40 @@ impl Engine {
         self.refresh_acc();
     }
 
+    pub fn go(&mut self, wtime: u64, btime: u64, _winc: u64, _binc: u64) {
+        self.time = match self.board.get_turn() {
+            true => Duration::from_millis(wtime / 30),
+            false => Duration::from_millis(btime / 30)
+        };
+
+        //println!("wtime {} btime {} winc {} binc {}", wtime, btime, winc, binc);
+
+        self.go_depth(MAX_DEPTH);
+    }
+
+    fn should_stop(&mut self) -> bool {
+        if self.start.elapsed() >= self.time {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
     pub fn go_depth(&mut self, depth: usize) {
         let mut bestmove = None;
         let mut score;
-        let start = Instant::now();
+        self.start = Instant::now();
 
         for i in 0..depth {
             (bestmove, score) = self.search(i + 1);
 
-            let time = start.elapsed().as_millis();
+            if bestmove == None {
+                println!("bestmove {}", self.prev_pv[0][0].unwrap_or(Move::NONE));
+                return;
+            }
+
+            let time = self.start.elapsed().as_millis();
             let nps = if time > 0 {
                 self.nodes * 1000 / time as u64
             } else {
@@ -246,9 +275,19 @@ impl Engine {
         moves.order_pv_move(pv_move);
 
         for mv in &moves {
+            if self.should_stop() && depth > 1 {
+                return (None, 0);
+            }
+
             let undo = self.make(*mv, 0);
 
-            let score = -self.negamax(depth - 1, -eval::INF, -alpha, 1);
+            let score = -(match self.negamax(depth - 1, -eval::INF, -alpha, 1) {
+                Some(s) => -s,
+                None => {
+                    self.board.unmake_move(undo);
+                    return (None, 0);
+                }
+            });
 
             self.board.unmake_move(undo);
 
@@ -273,7 +312,7 @@ impl Engine {
         (best_move, best_score)
     }
 
-    fn negamax(&mut self, depth: usize, mut alpha: i32, beta: i32, ply: usize) -> i32 {
+    fn negamax(&mut self, depth: usize, mut alpha: i32, beta: i32, ply: usize) -> Option<i32> {
         self.pv_len[ply] = 0;
 
         let mut moves = MoveArray::new();
@@ -283,14 +322,14 @@ impl Engine {
 
         if moves.is_empty() {
             if self.board.is_in_check(self.board.get_turn()) {
-                return -eval::MATE + ply as i32;
+                return Some(-eval::MATE + ply as i32);
             } else {
-                return eval::REMIS;
+                return Some(eval::REMIS);
             }
         }
 
         if depth == 0 {
-            return self.nnue.evaluate(&self.acc[ply], self.board.get_turn());
+            return Some(self.nnue.evaluate(&self.acc[ply], self.board.get_turn()));
         }
 
         let pv_move = if self.prev_pv_len[ply] > 0 {
@@ -302,9 +341,19 @@ impl Engine {
         moves.order_pv_move(pv_move);
 
         for mv in &moves {
+            if self.should_stop() {
+                return None;
+            }
+
             let undo = self.make(*mv, ply);
 
-            let score = -self.negamax(depth - 1, -beta, -alpha, ply + 1);
+            let score = -(match self.negamax(depth - 1, -beta, -alpha, ply + 1) {
+                Some(e) => e,
+                None => {
+                    self.board.unmake_move(undo);
+                    return None;
+                }
+            });
 
             if score > alpha {
                 alpha = score;
@@ -329,7 +378,7 @@ impl Engine {
             }
         }
 
-        alpha
+        Some(alpha)
     }
 }
 

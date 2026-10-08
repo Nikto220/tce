@@ -64,7 +64,26 @@ pub fn run() {
                                 engine.perft_divide(num);
                             }
                         }
-                        _ => engine.go_depth(5),
+                        "winc" | "binc" | "wtime" | "btime" => {
+                            let (mut wtime, mut btime, mut winc, mut binc) = (0, 0, 0, 0);
+                            for i in 1..=4 {
+                                if tokens.len() > i * 2 {
+                                    match tokens[i * 2 - 1] {
+                                        "winc" => {winc = tokens[i * 2].parse::<u64>().unwrap_or(0)},
+                                        "binc" => {binc = tokens[i * 2].parse::<u64>().unwrap_or(0)}
+                                        "wtime" => {wtime = tokens[i * 2].parse::<u64>().unwrap_or(0)}
+                                        "btime" => {btime = tokens[i * 2].parse::<u64>().unwrap_or(0)}
+                                        _ => {}
+                                    }
+                                }
+                                else {
+                                    break;
+                                }
+                            }
+
+                            engine.go(wtime, btime, winc, binc);
+                        },
+                        _ => {}
                     }
                 }
             }
