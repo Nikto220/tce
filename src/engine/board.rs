@@ -1998,7 +1998,7 @@ impl Board {
             "w" => true,
             "b" => false,
             _ => {
-                println!("Invalid FEN side to move");
+                println!("info string Invalid FEN side to move");
                 return;
             }
         };

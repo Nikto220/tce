@@ -282,7 +282,7 @@ impl Engine {
             let undo = self.make(*mv, 0);
 
             let score = -(match self.negamax(depth - 1, -eval::INF, -alpha, 1) {
-                Some(s) => -s,
+                Some(e) => e,
                 None => {
                     self.board.unmake_move(undo);
                     return (None, 0);
