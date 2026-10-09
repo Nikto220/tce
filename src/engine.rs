@@ -125,7 +125,11 @@ impl Engine {
 
         //println!("wtime {} btime {} winc {} binc {}", wtime, btime, winc, binc);
 
+        self.use_time = true;
+
         self.go_depth(MAX_DEPTH);
+
+        self.use_time = false;
     }
 
     fn should_stop(&mut self) -> bool {
