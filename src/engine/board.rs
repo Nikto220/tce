@@ -202,6 +202,10 @@ impl MoveArray {
     }
 
     pub fn order_pv_move(&mut self, pv_move: Option<Move>, idx_to_swap: usize) {
+        if idx_to_swap >= self.len {
+            return;
+        }
+
         let Some(pv_move) = pv_move else {
             return;
         };
@@ -359,7 +363,7 @@ impl Board {
     }
 
     pub fn make_move(&mut self, mv: Move) -> Undo {
-        let piece = self.piece_at(mv.from).expect("Brak figury na polu from");
+        let piece = self.piece_at(mv.from).expect(&format!("Brak figury na polu from: {}", mv)[..]);
 
         let mut undo = Undo {
             mv,

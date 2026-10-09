@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::time::{Duration, Instant};
 
 pub mod board;
@@ -151,6 +152,8 @@ impl Engine {
 
             if bestmove == None {
                 println!("bestmove {}", self.prev_pv[0][0].unwrap_or(Move::NONE));
+                use std::io::Write;
+                let _ = std::io::stdout().flush();
                 return;
             }
 
@@ -216,6 +219,7 @@ impl Engine {
         }
 
         println!("bestmove {}", bestmove.unwrap());
+        let _ = std::io::stdout().flush();
     }
 
     pub fn eval(&self) -> i32 {
@@ -293,22 +297,45 @@ impl Engine {
 
         moves.order_pv_move(pv_move, 0);
 
-        for mv in &moves {
+        for (move_index, mv) in (&moves).into_iter().enumerate() {
             if self.should_stop() && depth > 1 {
                 return (None, 0);
             }
 
             let undo = self.make(*mv, 0);
 
-            let score = -(match self.negamax(depth - 1, -eval::INF, -alpha, 1) {
-                Some(e) => e,
-                None => {
-                    self.board.unmake_move(undo);
-                    return (None, 0);
+            let score = if move_index == 0 {
+                // First root move: full window.
+                match self.negamax(depth - 1, -eval::INF, -alpha, 1, true) {
+                    Some(score) => -score,
+                    None => {
+                        self.board.unmake_move(undo);
+                        return (None, 0);
+                    }
                 }
-            });
+            } else {
+                // Later root moves: null-window search.
+                let mut score = match self.negamax(depth - 1, -alpha - 1, -alpha, 1, false) {
+                    Some(score) => -score,
+                    None => {
+                        self.board.unmake_move(undo);
+                        return (None, 0);
+                    }
+                };
 
-            self.board.unmake_move(undo);
+                // Re-search if this move beats alpha.
+                if score > alpha && score < eval::INF {
+                    score = match self.negamax(depth - 1, -eval::INF, -alpha, 1, true) {
+                        Some(score) => -score,
+                        None => {
+                            self.board.unmake_move(undo);
+                            return (None, 0);
+                        }
+                    };
+                }
+
+                score
+            };
 
             if score > best_score {
                 best_score = score;
@@ -326,12 +353,20 @@ impl Engine {
             }
 
             alpha = alpha.max(score);
-        }
 
+            self.board.unmake_move(undo);
+        }
         (best_move, best_score)
     }
 
-    fn negamax(&mut self, depth: usize, mut alpha: i32, mut beta: i32, ply: usize) -> Option<i32> {
+    fn negamax(
+        &mut self,
+        depth: usize,
+        mut alpha: i32,
+        mut beta: i32,
+        ply: usize,
+        pv_node: bool,
+    ) -> Option<i32> {
         self.pv_len[ply] = 0;
 
         self.nodes += 1;
@@ -350,9 +385,10 @@ impl Engine {
 
         if let Some(entry) = self.tt.probe(key) {
             tt_move = entry.best_move;
-            let tt_score = score_from_tt(entry.score, ply);
 
-            if entry.depth >= depth {
+            if !pv_node && entry.depth >= depth {
+                let tt_score = score_from_tt(entry.score, ply);
+
                 match entry.bound {
                     Bound::Exact => return Some(tt_score),
 
@@ -370,7 +406,6 @@ impl Engine {
                 }
             }
         }
-
         let mut moves = MoveArray::new();
         self.board.generate_moves(&mut moves);
 
@@ -403,20 +438,46 @@ impl Engine {
 
         let mut best_score = -eval::INF;
 
-        for mv in &moves {
+        for (move_index, mv) in moves.into_iter().enumerate() {
             if self.should_stop() {
                 return None;
             }
 
             let undo = self.make(*mv, ply);
 
-            let score = -(match self.negamax(depth - 1, -beta, -alpha, ply + 1) {
-                Some(e) => e,
-                None => {
-                    self.board.unmake_move(undo);
-                    return None;
+            let score = if move_index == 0 {
+                // First move: search the full window.
+                match self.negamax(depth - 1, -beta, -alpha, ply + 1, pv_node) {
+                    Some(score) => -score,
+                    None => {
+                        self.board.unmake_move(undo);
+                        return None;
+                    }
                 }
-            });
+            } else {
+                // Later moves: first search a null window.
+                let mut score = match self.negamax(depth - 1, -alpha - 1, -alpha, ply + 1, false) {
+                    Some(score) => -score,
+                    None => {
+                        self.board.unmake_move(undo);
+                        return None;
+                    }
+                };
+
+                // If this move might improve alpha, research it
+                // with the full window to obtain a reliable PV.
+                if pv_node && score > alpha && score < beta {
+                    score = match self.negamax(depth - 1, -beta, -alpha, ply + 1, true) {
+                        Some(score) => -score,
+                        None => {
+                            self.board.unmake_move(undo);
+                            return None;
+                        }
+                    };
+                }
+
+                score
+            };
 
             if score > best_score {
                 best_score = score;
@@ -426,6 +487,8 @@ impl Engine {
             if score > alpha {
                 alpha = score;
 
+                // Build this node's PV from the improving move
+                // and the child's PV.
                 self.pv[ply][0] = Some(*mv);
 
                 let child_len = self.pv_len[ply + 1];
@@ -439,13 +502,10 @@ impl Engine {
 
             self.board.unmake_move(undo);
 
-            alpha = alpha.max(score);
-
             if alpha >= beta {
                 break;
             }
         }
-
         // Classify the result against the ORIGINAL search window.
         let bound = if best_score <= alpha_original {
             Bound::Upper
