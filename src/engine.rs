@@ -32,7 +32,7 @@ pub struct Engine {
     nnue: Box<eval::Nnue>,
     start: Instant,
     time: Duration,
-    use_time: bool
+    use_time: bool,
 }
 
 impl Engine {
@@ -52,7 +52,7 @@ impl Engine {
             prev_pv_len: [0; MAX_DEPTH],
             start: Instant::now(),
             time: Duration::new(0, 0),
-            use_time: false
+            use_time: false,
         };
         engine.refresh_acc();
         engine
@@ -140,6 +140,7 @@ impl Engine {
         let mut bestmove = None;
         let mut score;
         self.start = Instant::now();
+        self.nodes = 0;
 
         for i in 0..depth {
             (bestmove, score) = self.search(i + 1);
@@ -270,7 +271,6 @@ impl Engine {
         let mut best_move = None;
         let mut best_score = -eval::INF;
         let mut alpha = -eval::INF;
-        self.nodes = 0;
 
         self.prev_pv = self.pv.clone();
         self.prev_pv_len = self.pv_len;
@@ -287,7 +287,7 @@ impl Engine {
             None
         };
 
-        moves.order_pv_move(pv_move);
+        moves.order_pv_move(pv_move, 0);
 
         for mv in &moves {
             if self.should_stop() && depth > 1 {
@@ -327,24 +327,65 @@ impl Engine {
         (best_move, best_score)
     }
 
-    fn negamax(&mut self, depth: usize, mut alpha: i32, beta: i32, ply: usize) -> Option<i32> {
+    fn negamax(&mut self, depth: usize, mut alpha: i32, mut beta: i32, ply: usize) -> Option<i32> {
         self.pv_len[ply] = 0;
+
+        self.nodes += 1;
+
+        if depth == 0 {
+            return Some(self.nnue.evaluate(&self.acc[ply], self.board.get_turn()));
+        }
+
+        let key = self.board.zobrist_hash();
+
+        let alpha_original = alpha;
+        let beta_original = beta;
+
+        let mut tt_move = None;
+        let mut best_move = None;
+
+        if let Some(entry) = self.tt.probe(key) {
+            tt_move = entry.best_move;
+            let tt_score = score_from_tt(entry.score, ply);
+
+            if entry.depth >= depth {
+                match entry.bound {
+                    Bound::Exact => return Some(tt_score),
+
+                    Bound::Lower => {
+                        alpha = alpha.max(tt_score);
+                    }
+
+                    Bound::Upper => {
+                        beta = beta.min(tt_score);
+                    }
+                }
+
+                if alpha >= beta {
+                    return Some(tt_score);
+                }
+            }
+        }
 
         let mut moves = MoveArray::new();
         self.board.generate_moves(&mut moves);
 
-        self.nodes += 1;
-
         if moves.is_empty() {
-            if self.board.is_in_check(self.board.get_turn()) {
-                return Some(-eval::MATE + ply as i32);
+            let score = if self.board.is_in_check(self.board.get_turn()) {
+                -eval::MATE + ply as i32
             } else {
-                return Some(eval::REMIS);
-            }
-        }
+                eval::REMIS
+            };
 
-        if depth == 0 {
-            return Some(self.nnue.evaluate(&self.acc[ply], self.board.get_turn()));
+            self.tt.store(TTEntry {
+                key,
+                depth,
+                score: score_to_tt(score, ply),
+                bound: Bound::Exact,
+                best_move: None,
+            });
+
+            return Some(score);
         }
 
         let pv_move = if self.prev_pv_len[ply] > 0 {
@@ -353,7 +394,10 @@ impl Engine {
             None
         };
 
-        moves.order_pv_move(pv_move);
+        moves.order_pv_move(pv_move, 1);
+        moves.order_pv_move(tt_move, 0);
+
+        let mut best_score = -eval::INF;
 
         for mv in &moves {
             if self.should_stop() {
@@ -369,6 +413,11 @@ impl Engine {
                     return None;
                 }
             });
+
+            if score > best_score {
+                best_score = score;
+                best_move = Some(*mv);
+            }
 
             if score > alpha {
                 alpha = score;
@@ -393,7 +442,24 @@ impl Engine {
             }
         }
 
-        Some(alpha)
+        // Classify the result against the ORIGINAL search window.
+        let bound = if best_score <= alpha_original {
+            Bound::Upper
+        } else if best_score >= beta_original {
+            Bound::Lower
+        } else {
+            Bound::Exact
+        };
+
+        self.tt.store(TTEntry {
+            key,
+            depth: depth,
+            score: score_to_tt(best_score, ply),
+            bound,
+            best_move,
+        });
+
+        Some(best_score)
     }
 }
 
@@ -431,5 +497,31 @@ fn update_acc(acc: &mut eval::Accumulator, net: &eval::Nnue, undo: &Undo) {
             acc.add(net, piece / 6, 3, to + 1);
         }
         _ => {}
+    }
+}
+
+#[inline]
+fn score_to_tt(score: i32, ply: usize) -> i32 {
+    const MATE_THRESHOLD: i32 = eval::MATE - 1000;
+
+    if score >= MATE_THRESHOLD {
+        score + ply as i32
+    } else if score <= -MATE_THRESHOLD {
+        score - ply as i32
+    } else {
+        score
+    }
+}
+
+#[inline]
+fn score_from_tt(score: i32, ply: usize) -> i32 {
+    const MATE_THRESHOLD: i32 = eval::MATE - 1000;
+
+    if score >= MATE_THRESHOLD {
+        score - ply as i32
+    } else if score <= -MATE_THRESHOLD {
+        score + ply as i32
+    } else {
+        score
     }
 }

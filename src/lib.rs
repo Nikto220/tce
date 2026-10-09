@@ -20,6 +20,8 @@ pub fn run() {
             "uci" => {
                 println!("id name TCE");
                 println!("id author Nikto");
+                println!();
+                println!("option name Hash type spin default 512 min 1 max 1048576");
                 println!("uciok");
             }
             "isready" => {

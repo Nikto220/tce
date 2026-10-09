@@ -201,14 +201,14 @@ impl MoveArray {
         self.moves[i2] = temp;
     }
 
-    pub fn order_pv_move(&mut self, pv_move: Option<Move>) {
+    pub fn order_pv_move(&mut self, pv_move: Option<Move>, idx_to_swap: usize) {
         let Some(pv_move) = pv_move else {
             return;
         };
 
         for i in 0..self.len() {
             if self.moves[i] == pv_move {
-                self.swap(0, i);
+                self.swap(idx_to_swap, i);
                 return;
             }
         }
@@ -265,7 +265,7 @@ impl Board {
             turn: true,
             castling: 0b00001111,
             en_passant: None,
-            hash: 0
+            hash: 0,
         };
         instance.hash = instance.recompute_hash();
         instance
