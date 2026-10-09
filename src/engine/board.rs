@@ -1,6 +1,6 @@
-use crate::engine::eval;
+use super::zobrist::*;
 
-use super::super::attacks::*;
+use super::attacks::*;
 
 pub const A1: u8 = 0;
 pub const B1: u8 = 1;
@@ -64,6 +64,8 @@ pub struct Board {
     turn: bool,
     castling: u8,
     en_passant: Option<u8>,
+
+    hash: u64,
 }
 
 struct CheckInfo {
@@ -154,6 +156,8 @@ pub struct Undo {
     pub en_passant: Option<u8>,
 
     pub mv: Move,
+
+    pub hash: u64,
 }
 
 pub struct MoveArray {
@@ -252,7 +256,7 @@ impl Board {
 
         let white_occ = pieces[0] | pieces[1] | pieces[2] | pieces[3] | pieces[4] | pieces[5];
         let black_occ = pieces[6] | pieces[7] | pieces[8] | pieces[9] | pieces[10] | pieces[11];
-        Self {
+        let mut instance = Self {
             pieces,
             white_occ,
             black_occ,
@@ -261,7 +265,69 @@ impl Board {
             turn: true,
             castling: 0b00001111,
             en_passant: None,
+            hash: 0
+        };
+        instance.hash = instance.recompute_hash();
+        instance
+    }
+
+    #[inline]
+    pub fn zobrist_hash(&self) -> u64 {
+        self.hash
+    }
+
+    #[inline]
+    fn ep_file(en_passant: Option<u8>) -> Option<usize> {
+        en_passant.map(|sq| (sq % 8) as usize)
+    }
+
+    #[inline]
+    fn set_castling_hash(&mut self, new_castling: u8) {
+        let z = Zobrist::get();
+
+        self.hash ^= z.castling[(self.castling & 0x0F) as usize];
+        self.castling = new_castling;
+        self.hash ^= z.castling[(self.castling & 0x0F) as usize];
+    }
+
+    #[inline]
+    fn set_en_passant_hash(&mut self, new_ep: Option<u8>) {
+        let z = Zobrist::get();
+
+        if let Some(file) = Self::ep_file(self.en_passant) {
+            self.hash ^= z.en_passant[file];
         }
+
+        self.en_passant = new_ep;
+
+        if let Some(file) = Self::ep_file(self.en_passant) {
+            self.hash ^= z.en_passant[file];
+        }
+    }
+
+    fn recompute_hash(&self) -> u64 {
+        let z = Zobrist::get();
+        let mut hash = z.castling[(self.castling & 0x0F) as usize];
+
+        if self.turn {
+            hash ^= z.side;
+        }
+
+        if let Some(file) = Self::ep_file(self.en_passant) {
+            hash ^= z.en_passant[file];
+        }
+
+        for piece in 0..12 {
+            let mut bb = self.pieces[piece];
+
+            while bb != 0 {
+                let sq = bb.trailing_zeros() as usize;
+                bb &= bb - 1;
+                hash ^= z.piece[piece][sq];
+            }
+        }
+
+        hash
     }
 
     pub fn position_startpos(&mut self) {
@@ -302,6 +368,7 @@ impl Board {
             captured_square: None,
             castling: self.castling,
             en_passant: self.en_passant,
+            hash: self.hash,
         };
 
         //println!("{:#?}", mv);
@@ -400,17 +467,16 @@ impl Board {
         // 4. EN PASSANT
         // --------------------------------------------------
 
-        self.en_passant = None;
+        self.set_en_passant_hash(None);
 
         if matches!(mv.move_type, MoveType::DoublePawnPush) {
-            self.en_passant = Some(if self.turn { mv.from + 8 } else { mv.from - 8 });
+            let ep = if self.turn { mv.from + 8 } else { mv.from - 8 };
+
+            self.set_en_passant_hash(Some(ep));
         }
 
-        // --------------------------------------------------
-        // 5. ZMIANA STRONY
-        // --------------------------------------------------
-
         self.turn = !self.turn;
+        self.hash ^= Zobrist::get().side;
 
         undo
     }
@@ -485,6 +551,14 @@ impl Board {
 
         self.castling = undo.castling;
         self.en_passant = undo.en_passant;
+        self.hash = undo.hash;
+
+        #[cfg(debug_assertions)]
+        debug_assert_eq!(
+            self.hash,
+            self.recompute_hash(),
+            "Zobrist hash mismatch after unmake_move"
+        );
     }
 
     #[inline(always)]
@@ -1637,6 +1711,8 @@ impl Board {
         }
 
         self.occupancy |= bb;
+
+        self.hash ^= Zobrist::get().piece[piece][square as usize];
     }
 
     #[inline(always)]
@@ -1653,6 +1729,8 @@ impl Board {
         }
 
         self.occupancy &= !bb;
+
+        self.hash ^= Zobrist::get().piece[piece][square as usize];
     }
 
     #[inline(always)]
@@ -1673,53 +1751,43 @@ impl Board {
         }
 
         self.occupancy ^= mask;
+
+        let z = Zobrist::get();
+        self.hash ^= z.piece[piece][from as usize];
+        self.hash ^= z.piece[piece][to as usize];
     }
 
     fn update_castling_rights(&mut self, piece: usize, from: u8) {
+        let mut rights = self.castling;
+
         match piece {
-            WK => self.castling &= !(WK_CASTLE | WQ_CASTLE),
-            BK => self.castling &= !(BK_CASTLE | BQ_CASTLE),
+            WK => rights &= !(WK_CASTLE | WQ_CASTLE),
+            BK => rights &= !(BK_CASTLE | BQ_CASTLE),
 
-            WR if from == H1 => {
-                self.castling &= !WK_CASTLE;
-            }
-
-            WR if from == A1 => {
-                self.castling &= !WQ_CASTLE;
-            }
-
-            BR if from == H8 => {
-                self.castling &= !BK_CASTLE;
-            }
-
-            BR if from == A8 => {
-                self.castling &= !BQ_CASTLE;
-            }
+            WR if from == H1 => rights &= !WK_CASTLE,
+            WR if from == A1 => rights &= !WQ_CASTLE,
+            BR if from == H8 => rights &= !BK_CASTLE,
+            BR if from == A8 => rights &= !BQ_CASTLE,
 
             _ => {}
         }
+
+        self.set_castling_hash(rights);
     }
 
     fn update_castling_rights_capture(&mut self, piece: usize, square: u8) {
+        let mut rights = self.castling;
+
         match piece {
-            WR if square == H1 => {
-                self.castling &= !WK_CASTLE;
-            }
-
-            WR if square == A1 => {
-                self.castling &= !WQ_CASTLE;
-            }
-
-            BR if square == H8 => {
-                self.castling &= !BK_CASTLE;
-            }
-
-            BR if square == A8 => {
-                self.castling &= !BQ_CASTLE;
-            }
+            WR if square == H1 => rights &= !WK_CASTLE,
+            WR if square == A1 => rights &= !WQ_CASTLE,
+            BR if square == H8 => rights &= !BK_CASTLE,
+            BR if square == A8 => rights &= !BQ_CASTLE,
 
             _ => {}
         }
+
+        self.set_castling_hash(rights);
     }
 
     pub fn parse_move(&self, s: &str) -> Option<Move> {
@@ -2058,7 +2126,10 @@ impl Board {
             turn,
             castling,
             en_passant,
+            hash: 0,
         };
+
+        self.recompute_hash();
     }
 }
 

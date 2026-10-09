@@ -7,15 +7,22 @@ pub mod attacks;
 
 mod eval;
 
+mod tt;
+use tt::*;
+
+mod zobrist;
+
 const MAX_DEPTH: usize = 128;
 
 pub struct Config {
     threads: usize,
+    hash: usize,
 }
 
 pub struct Engine {
     config: Config,
     board: Board,
+    tt: TranspositionTable,
     nodes: u64,
     pv: Vec<[Option<Move>; MAX_DEPTH]>,
     pv_len: [usize; MAX_DEPTH],
@@ -24,15 +31,18 @@ pub struct Engine {
     acc: Vec<eval::Accumulator>,
     nnue: Box<eval::Nnue>,
     start: Instant,
-    time: Duration
+    time: Duration,
+    use_time: bool
 }
 
 impl Engine {
     pub fn new(config: Config) -> Self {
         let nnue = eval::Nnue::from_bytes(include_bytes!("../nnue.bin"));
+        let hash = config.hash;
         let mut engine = Self {
             config,
             board: Board::new(),
+            tt: TranspositionTable::new(hash),
             acc: vec![eval::Accumulator::new(&nnue); MAX_DEPTH + 1],
             nnue,
             nodes: 0,
@@ -41,10 +51,16 @@ impl Engine {
             prev_pv: vec![[None; MAX_DEPTH]; MAX_DEPTH],
             prev_pv_len: [0; MAX_DEPTH],
             start: Instant::now(),
-            time: Duration::new(0, 0)
+            time: Duration::new(0, 0),
+            use_time: false
         };
         engine.refresh_acc();
         engine
+    }
+
+    pub fn set_hash(&mut self, hash: usize) {
+        self.config.hash = hash;
+        self.tt = TranspositionTable::new(hash);
     }
 
     /// Full rebuild from the board; the only place that loops over all pieces.
@@ -104,7 +120,7 @@ impl Engine {
     pub fn go(&mut self, wtime: u64, btime: u64, _winc: u64, _binc: u64) {
         self.time = match self.board.get_turn() {
             true => Duration::from_millis(wtime / 30),
-            false => Duration::from_millis(btime / 30)
+            false => Duration::from_millis(btime / 30),
         };
 
         //println!("wtime {} btime {} winc {} binc {}", wtime, btime, winc, binc);
@@ -113,10 +129,9 @@ impl Engine {
     }
 
     fn should_stop(&mut self) -> bool {
-        if self.start.elapsed() >= self.time {
+        if self.start.elapsed() >= self.time && self.use_time {
             return true;
-        }
-        else {
+        } else {
             return false;
         }
     }
@@ -383,8 +398,8 @@ impl Engine {
 }
 
 impl Config {
-    pub fn new(threads: usize) -> Self {
-        Self { threads }
+    pub fn new(threads: usize, hash: usize) -> Self {
+        Self { threads, hash }
     }
 }
 

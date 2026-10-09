@@ -7,7 +7,7 @@ use engine::*;
 
 pub fn run() {
     let stdin = io::stdin();
-    let mut engine = Engine::new(Config::new(1));
+    let mut engine = Engine::new(Config::new(1, 512));
 
     for line in stdin.lock().lines() {
         let line = line.unwrap();
@@ -69,20 +69,23 @@ pub fn run() {
                             for i in 1..=4 {
                                 if tokens.len() > i * 2 {
                                     match tokens[i * 2 - 1] {
-                                        "winc" => {winc = tokens[i * 2].parse::<u64>().unwrap_or(0)},
-                                        "binc" => {binc = tokens[i * 2].parse::<u64>().unwrap_or(0)}
-                                        "wtime" => {wtime = tokens[i * 2].parse::<u64>().unwrap_or(0)}
-                                        "btime" => {btime = tokens[i * 2].parse::<u64>().unwrap_or(0)}
+                                        "winc" => winc = tokens[i * 2].parse::<u64>().unwrap_or(0),
+                                        "binc" => binc = tokens[i * 2].parse::<u64>().unwrap_or(0),
+                                        "wtime" => {
+                                            wtime = tokens[i * 2].parse::<u64>().unwrap_or(0)
+                                        }
+                                        "btime" => {
+                                            btime = tokens[i * 2].parse::<u64>().unwrap_or(0)
+                                        }
                                         _ => {}
                                     }
-                                }
-                                else {
+                                } else {
                                     break;
                                 }
                             }
 
                             engine.go(wtime, btime, winc, binc);
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -92,6 +95,33 @@ pub fn run() {
             }
             "quit" => {
                 break;
+            }
+            "setoption" => {
+                if tokens.len() >= 5 {
+                    let mut name = "";
+                    let mut value = "";
+                    for (i, t) in tokens.iter().enumerate() {
+                        match *t {
+                            "name" => {
+                                name = tokens[i + 1];
+                            }
+                            "value" => {
+                                value = tokens[i + 1];
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    match name {
+                        "Hash" => {
+                            engine.set_hash(match value.parse::<usize>() {
+                                Ok(n) => n,
+                                Err(_) => continue,
+                            });
+                        }
+                        _ => {}
+                    }
+                }
             }
             _ => {}
         }

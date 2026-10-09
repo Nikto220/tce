@@ -9,7 +9,7 @@
 
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Write, Seek, SeekFrom};
+use std::io::{self, BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::str::FromStr;
 use std::time::Instant;
 
@@ -984,11 +984,7 @@ fn encode_v2(
         ));
     }
 
-    let score_stm = if pos.white {
-        score_white
-    } else {
-        -score_white
-    };
+    let score_stm = if pos.white { score_white } else { -score_white };
 
     let result_stm = if pos.white {
         result_white
@@ -1042,8 +1038,7 @@ fn encode_v2(
         n += 1;
     }
 
-    out[V2_OCCUPANCY_OFFSET..V2_OCCUPANCY_OFFSET + 8]
-        .copy_from_slice(&occupancy.to_le_bytes());
+    out[V2_OCCUPANCY_OFFSET..V2_OCCUPANCY_OFFSET + 8].copy_from_slice(&occupancy.to_le_bytes());
 
     for i in 0..n {
         let code = piece_codes[i];
@@ -1055,16 +1050,11 @@ fn encode_v2(
         }
     }
 
-    out[V2_SCORE_OFFSET..V2_SCORE_OFFSET + 2]
-        .copy_from_slice(&score.to_le_bytes());
+    out[V2_SCORE_OFFSET..V2_SCORE_OFFSET + 2].copy_from_slice(&score.to_le_bytes());
 
     out[V2_RESULT_OFFSET] = result_stm;
 
-    out[V2_FLAGS_OFFSET] = if pos.white {
-        FLAG_WHITE_TO_MOVE
-    } else {
-        0
-    };
+    out[V2_FLAGS_OFFSET] = if pos.white { FLAG_WHITE_TO_MOVE } else { 0 };
 
     // 28..31 remain zero.
     Ok(())
@@ -1074,7 +1064,7 @@ fn encode_v2(
 enum ParseError {
     BadFen,
     BadNumber,
-    BadLine
+    BadLine,
 }
 
 fn pos_from_fen(fen: &[u8]) -> Result<Pos, ParseError> {
@@ -1113,8 +1103,7 @@ fn pos_from_fen(fen: &[u8]) -> Result<Pos, ParseError> {
                 }
             }
 
-            b'p' | b'n' | b'b' | b'r' | b'q' | b'k'
-            | b'P' | b'N' | b'B' | b'R' | b'Q' | b'K' => {
+            b'p' | b'n' | b'b' | b'r' | b'q' | b'k' | b'P' | b'N' | b'B' | b'R' | b'Q' | b'K' => {
                 if file >= 8 {
                     return Err(ParseError::BadFen);
                 }
@@ -1177,18 +1166,8 @@ impl<W: Write + Seek> BinWriter<W> {
         })
     }
 
-    fn write(
-        &mut self,
-        pos: &Pos,
-        score_white: i32,
-        result_white: u8,
-    ) -> io::Result<()> {
-        encode_v2(
-            pos,
-            score_white,
-            result_white,
-            &mut self.record,
-        )?;
+    fn write(&mut self, pos: &Pos, score_white: i32, result_white: u8) -> io::Result<()> {
+        encode_v2(pos, score_white, result_white, &mut self.record)?;
 
         self.out.write_all(&self.record)?;
         self.written += 1;
@@ -1204,22 +1183,12 @@ impl<W: Write + Seek> BinWriter<W> {
 }
 
 impl<W: Write + Seek> PositionSink for BinWriter<W> {
-    fn write_position(
-        &mut self,
-        pos: &Pos,
-        cp: i32,
-        result: &str,
-    ) -> io::Result<()> {
+    fn write_position(&mut self, pos: &Pos, cp: i32, result: &str) -> io::Result<()> {
         let result_code = match result {
             "0.0" => 0,
             "0.5" => 1,
             "1.0" => 2,
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "invalid result",
-                ))
-            }
+            _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid result")),
         };
 
         self.write(pos, cp, result_code)
@@ -1504,9 +1473,7 @@ fn run_fen_to_bin(input: &str, output: &str) -> io::Result<()> {
 
     eprintln!(
         "finished | {} lines | {} positions | {} bad lines",
-        lines,
-        writer.written,
-        bad
+        lines, writer.written, bad
     );
 
     Ok(())
@@ -1599,13 +1566,13 @@ fn main() {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }
-        },
+        }
         "ptb" => {
             if let Err(e) = run_pgn_to_bin(&paths[1], &paths[2], o) {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }
-        },
+        }
         "ftb" => {
             if let Err(e) = run_fen_to_bin(&paths[1], &paths[2]) {
                 eprintln!("error: {e}");
