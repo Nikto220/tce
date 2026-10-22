@@ -240,6 +240,17 @@ impl Engine {
 
         let mut nodes = 0;
 
+        if depth == 2 {
+            for mv in &moves {
+                let undo = self.board.make_move(*mv);
+                let mut new_moves = MoveArray::new();
+                self.board.generate_moves(&mut new_moves);
+                nodes += new_moves.len() as u64;
+                self.board.unmake_move(undo);
+            }
+            return nodes;
+        }
+
         for mv in &moves {
             let undo = self.board.make_move(*mv);
 
