@@ -85,7 +85,7 @@ impl Engine {
 
     /// make_move + accumulator update for the child at ply + 1.
     fn make(&mut self, mv: Move, ply: usize) -> Undo {
-        let undo = self.board.make_move::<true>(mv);
+        let undo = self.board.make_move(mv);
         self.acc[ply + 1] = self.acc[ply];
         update_acc(&mut self.acc[ply + 1], &self.nnue, &undo);
 
@@ -241,12 +241,15 @@ impl Engine {
         let mut nodes = 0;
 
         if depth == 2 {
-            for mv in &moves_array[depth] {
-                let undo = self.board.make_move::<false>(*mv);
-                let mut new_moves = MoveArray::new();
-                self.board.generate_moves(&mut new_moves);
-                nodes += new_moves.len() as u64;
-                self.board.unmake_move::<false>(undo);
+            unsafe {
+                let ptr = moves_array.as_mut_ptr().add(depth);
+                for mv in ptr.as_ref().unwrap() {
+                    moves_array[depth - 1].empty();
+                    let undo = self.board.make_move(*mv);
+                    self.board.generate_moves(&mut moves_array[depth - 1]);
+                    nodes += moves_array[depth - 1].len() as u64;
+                    self.board.unmake_move(undo);
+                }
             }
             return nodes;
         }
@@ -254,11 +257,11 @@ impl Engine {
         unsafe {
             let ptr = moves_array.as_mut_ptr().add(depth);
             for mv in ptr.as_ref().unwrap() {
-                let undo = self.board.make_move::<false>(*mv);
+                let undo = self.board.make_move(*mv);
 
                 nodes += self.perft(depth - 1, moves_array);
 
-                self.board.unmake_move::<false>(undo);
+                self.board.unmake_move(undo);
             }
         }
 
@@ -276,11 +279,11 @@ impl Engine {
         let time = Instant::now();
 
         for mv in &moves {
-            let undo = self.board.make_move::<false>(*mv);
+            let undo = self.board.make_move(*mv);
 
             let nodes = self.perft(depth - 1, &mut moves_array);
 
-            self.board.unmake_move::<false>(undo);
+            self.board.unmake_move(undo);
 
             println!("{}: {}", mv, nodes);
 
@@ -325,7 +328,7 @@ impl Engine {
                 match self.negamax(depth - 1, -eval::INF, -alpha, 1, true) {
                     Some(score) => -score,
                     None => {
-                        self.board.unmake_move::<true>(undo);
+                        self.board.unmake_move(undo);
                         return (None, 0);
                     }
                 }
@@ -334,7 +337,7 @@ impl Engine {
                 let mut score = match self.negamax(depth - 1, -alpha - 1, -alpha, 1, false) {
                     Some(score) => -score,
                     None => {
-                        self.board.unmake_move::<true>(undo);
+                        self.board.unmake_move(undo);
                         return (None, 0);
                     }
                 };
@@ -344,7 +347,7 @@ impl Engine {
                     score = match self.negamax(depth - 1, -eval::INF, -alpha, 1, true) {
                         Some(score) => -score,
                         None => {
-                            self.board.unmake_move::<true>(undo);
+                            self.board.unmake_move(undo);
                             return (None, 0);
                         }
                     };
@@ -370,7 +373,7 @@ impl Engine {
 
             alpha = alpha.max(score);
 
-            self.board.unmake_move::<true>(undo);
+            self.board.unmake_move(undo);
         }
         (best_move, best_score)
     }
@@ -466,7 +469,7 @@ impl Engine {
                 match self.negamax(depth - 1, -beta, -alpha, ply + 1, pv_node) {
                     Some(score) => -score,
                     None => {
-                        self.board.unmake_move::<true>(undo);
+                        self.board.unmake_move(undo);
                         return None;
                     }
                 }
@@ -475,7 +478,7 @@ impl Engine {
                 let mut score = match self.negamax(depth - 1, -alpha - 1, -alpha, ply + 1, false) {
                     Some(score) => -score,
                     None => {
-                        self.board.unmake_move::<true>(undo);
+                        self.board.unmake_move(undo);
                         return None;
                     }
                 };
@@ -486,7 +489,7 @@ impl Engine {
                     score = match self.negamax(depth - 1, -beta, -alpha, ply + 1, true) {
                         Some(score) => -score,
                         None => {
-                            self.board.unmake_move::<true>(undo);
+                            self.board.unmake_move(undo);
                             return None;
                         }
                     };
@@ -516,7 +519,7 @@ impl Engine {
                 self.pv_len[ply] = child_len + 1;
             }
 
-            self.board.unmake_move::<true>(undo);
+            self.board.unmake_move(undo);
 
             if alpha >= beta {
                 break;

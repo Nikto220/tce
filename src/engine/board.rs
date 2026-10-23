@@ -409,11 +409,11 @@ impl Board {
                 }
             };
 
-            self.make_move::<true>(mv);
+            self.make_move(mv);
         }
     }
 
-    pub fn make_move<const UPDATE_HASH: bool>(&mut self, mv: Move) -> Undo {
+    pub fn make_move(&mut self, mv: Move) -> Undo {
         let mv_from = mv.from();
         let mv_to = mv.to();
 
@@ -440,7 +440,7 @@ impl Board {
         match mv.move_type() {
             Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => {
                 if let piece = self.piece_at(mv_to) && piece != NN {
-                    self.remove_piece::<UPDATE_HASH>(piece, mv_to);
+                    self.remove_piece(piece, mv_to);
 
                     undo.captured_piece = piece;
                     undo.captured_square = mv_to;
@@ -452,7 +452,7 @@ impl Board {
 
                 let captured_piece = if self.turn { BP } else { WP };
 
-                self.remove_piece::<UPDATE_HASH>(captured_piece, captured_square);
+                self.remove_piece(captured_piece, captured_square);
 
                 undo.captured_piece = captured_piece;
                 undo.captured_square = captured_square;
@@ -460,7 +460,7 @@ impl Board {
 
             Move::MVTP_CAPTURE => {
                 if let captured_piece = self.piece_at(mv_to) && captured_piece != NN {
-                    self.remove_piece::<UPDATE_HASH>(captured_piece, mv_to);
+                    self.remove_piece(captured_piece, mv_to);
 
                     undo.captured_piece = captured_piece;
                     undo.captured_square = mv_to;
@@ -477,48 +477,48 @@ impl Board {
         match mv.move_type() {
             Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => {
                 // usuwamy pionka
-                self.remove_piece::<UPDATE_HASH>(piece, mv_from);
+                self.remove_piece(piece, mv_from);
 
                 // dodajemy promowaną figurę
                 let promoted_piece = mv.promotion();
 
-                self.add_piece::<UPDATE_HASH>(promoted_piece, mv_to);
+                self.add_piece(promoted_piece, mv_to);
             }
 
             Move::MVTP_CASTLE_KING_SIDE => {
                 if self.turn {
                     // biały: e1 -> g1
-                    self.move_piece::<UPDATE_HASH>(WK, E1, G1);
+                    self.move_piece(WK, E1, G1);
 
                     // wieża: h1 -> f1
-                    self.move_piece::<UPDATE_HASH>(WR, H1, F1);
+                    self.move_piece(WR, H1, F1);
                 } else {
                     // czarny: e8 -> g8
-                    self.move_piece::<UPDATE_HASH>(BK, E8, G8);
+                    self.move_piece(BK, E8, G8);
 
                     // wieża: h8 -> f8
-                    self.move_piece::<UPDATE_HASH>(BR, H8, F8);
+                    self.move_piece(BR, H8, F8);
                 }
             }
 
             Move::MVTP_CASTLE_QUEEN_SIDE => {
                 if self.turn {
                     // biały: e1 -> c1
-                    self.move_piece::<UPDATE_HASH>(WK, E1, C1);
+                    self.move_piece(WK, E1, C1);
 
                     // wieża: a1 -> d1
-                    self.move_piece::<UPDATE_HASH>(WR, A1, D1);
+                    self.move_piece(WR, A1, D1);
                 } else {
                     // czarny: e8 -> c8
-                    self.move_piece::<UPDATE_HASH>(BK, E8, C8);
+                    self.move_piece(BK, E8, C8);
 
                     // wieża: a8 -> d8
-                    self.move_piece::<UPDATE_HASH>(BR, A8, D8);
+                    self.move_piece(BR, A8, D8);
                 }
             }
 
             _ => {
-                self.move_piece::<UPDATE_HASH>(piece, mv_from, mv_to);
+                self.move_piece(piece, mv_from, mv_to);
             }
         }
 
@@ -526,10 +526,10 @@ impl Board {
         // 3. ROSZADA
         // --------------------------------------------------
 
-        self.update_castling_rights::<UPDATE_HASH>(piece, mv_from);
+        self.update_castling_rights(piece, mv_from);
 
         if undo.captured_piece != NN && undo.captured_square != u8::MAX {
-            self.update_castling_rights_capture::<UPDATE_HASH>(undo.captured_square, undo.captured_square);
+            self.update_castling_rights_capture(undo.captured_square, undo.captured_square);
         }
 
         // --------------------------------------------------
@@ -545,15 +545,12 @@ impl Board {
         }
 
         self.turn = !self.turn;
-
-        if UPDATE_HASH {
-            self.hash ^= Zobrist::get().side;
-        }
+        self.hash ^= Zobrist::get().side;
 
         undo
     }
 
-    pub fn unmake_move<const UPDATE_HASH: bool>(&mut self, undo: Undo) {
+    pub fn unmake_move(&mut self, undo: Undo) {
         let mv = undo.mv;
         let mv_type = mv.move_type();
         let mv_from = mv.from();
@@ -567,7 +564,7 @@ impl Board {
                 // usuwamy promowaną figurę
                 let promoted_piece = mv.promotion();
 
-                self.remove_piece::<UPDATE_HASH>(promoted_piece, mv_to);
+                self.remove_piece(promoted_piece, mv_to);
 
                 // i przywracamy pionka
                 if self.turn { WP } else { BP }
@@ -587,32 +584,32 @@ impl Board {
         match mv.move_type() {
             Move::MVTP_CASTLE_KING_SIDE => {
                 if self.turn {
-                    self.move_piece::<UPDATE_HASH>(WK, G1, E1);
-                    self.move_piece::<UPDATE_HASH>(WR, F1, H1);
+                    self.move_piece(WK, G1, E1);
+                    self.move_piece(WR, F1, H1);
                 } else {
-                    self.move_piece::<UPDATE_HASH>(BK, G8, E8);
-                    self.move_piece::<UPDATE_HASH>(BR, F8, H8);
+                    self.move_piece(BK, G8, E8);
+                    self.move_piece(BR, F8, H8);
                 }
             }
 
             Move::MVTP_CASTLE_QUEEN_SIDE => {
                 if self.turn {
-                    self.move_piece::<UPDATE_HASH>(WK, C1, E1);
-                    self.move_piece::<UPDATE_HASH>(WR, D1, A1);
+                    self.move_piece(WK, C1, E1);
+                    self.move_piece(WR, D1, A1);
                 } else {
-                    self.move_piece::<UPDATE_HASH>(BK, C8, E8);
-                    self.move_piece::<UPDATE_HASH>(BR, D8, A8);
+                    self.move_piece(BK, C8, E8);
+                    self.move_piece(BR, D8, A8);
                 }
             }
 
             Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => {
                 let pawn = if self.turn { WP } else { BP };
 
-                self.add_piece::<UPDATE_HASH>(pawn, mv_from);
+                self.add_piece(pawn, mv_from);
             }
 
             _ => {
-                self.move_piece::<UPDATE_HASH>(piece, mv_to, mv_from);
+                self.move_piece(piece, mv_to, mv_from);
             }
         }
 
@@ -621,7 +618,7 @@ impl Board {
         // --------------------------------------------------
 
         if undo.captured_piece != NN && undo.captured_square != u8::MAX {
-            self.add_piece::<UPDATE_HASH>(undo.captured_piece, undo.captured_square);
+            self.add_piece(undo.captured_piece, undo.captured_square);
         }
 
         // --------------------------------------------------
@@ -630,9 +627,7 @@ impl Board {
 
         self.castling = undo.castling;
         self.en_passant = undo.en_passant;
-        if UPDATE_HASH {
-            self.hash = undo.hash;
-        }
+        self.hash = undo.hash;
 
         #[cfg(debug_assertions)]
         debug_assert_eq!(
@@ -1155,7 +1150,7 @@ impl Board {
         //
         // EP is special because the captured pawn disappears from
         // a different square, so evasion_mask alone is insufficient.
-        let undo = self.make_move::<false>(Move::new(
+        let undo = self.make_move(Move::new(
             from,
             to,
             Move::MVTP_EN_PASSANT,
@@ -1164,7 +1159,7 @@ impl Board {
 
         let legal = !self.is_in_check(white);
 
-        self.unmake_move::<false>(undo);
+        self.unmake_move(undo);
 
         legal
     }
@@ -1779,7 +1774,7 @@ impl Board {
     }
 
     #[inline(always)]
-    fn add_piece<const UPDATE_HASH: bool>(&mut self, piece: u8, square: u8) {
+    fn add_piece(&mut self, piece: u8, square: u8) {
         let bb = 1u64 << square;
 
         self.pieces[piece as usize] |= bb;
@@ -1793,13 +1788,11 @@ impl Board {
 
         self.occupancy |= bb;
 
-        if UPDATE_HASH {
-            self.hash ^= Zobrist::get().piece[piece as usize][square as usize];
-        }
+        self.hash ^= Zobrist::get().piece[piece as usize][square as usize];
     }
 
     #[inline(always)]
-    fn remove_piece<const UPDATE_HASH: bool>(&mut self, piece: u8, square: u8) {
+    fn remove_piece(&mut self, piece: u8, square: u8) {
         let bb = 1u64 << square;
 
         self.pieces[piece as usize] &= !bb;
@@ -1813,13 +1806,11 @@ impl Board {
 
         self.occupancy &= !bb;
 
-        if UPDATE_HASH {
-            self.hash ^= Zobrist::get().piece[piece as usize][square as usize];
-        }
+        self.hash ^= Zobrist::get().piece[piece as usize][square as usize];
     }
 
     #[inline(always)]
-    fn move_piece<const UPDATE_HASH: bool>(&mut self, piece: u8, from: u8, to: u8) {
+    fn move_piece(&mut self, piece: u8, from: u8, to: u8) {
         let from_bb = 1u64 << from;
         let to_bb = 1u64 << to;
         let mask = from_bb | to_bb;
@@ -1837,15 +1828,13 @@ impl Board {
 
         self.occupancy ^= mask;
 
-        if UPDATE_HASH {
-            let z = Zobrist::get();
-            self.hash ^= z.piece[piece as usize][from as usize];
-            self.hash ^= z.piece[piece as usize][to as usize];
-        }
+        let z = Zobrist::get();
+        self.hash ^= z.piece[piece as usize][from as usize];
+        self.hash ^= z.piece[piece as usize][to as usize];
     }
 
     #[inline(always)]
-    fn update_castling_rights<const UPDATE_HASH: bool>(&mut self, piece: u8, from: u8) {
+    fn update_castling_rights(&mut self, piece: u8, from: u8) {
         let mut rights = self.castling;
 
         match piece {
@@ -1860,13 +1849,11 @@ impl Board {
             _ => {}
         }
 
-        if UPDATE_HASH {
-            self.set_castling_hash(rights);
-        }
+        self.set_castling_hash(rights);
     }
 
     #[inline(always)]
-    fn update_castling_rights_capture<const UPDATE_HASH: bool>(&mut self, piece: u8, square: u8) {
+    fn update_castling_rights_capture(&mut self, piece: u8, square: u8) {
         let mut rights = self.castling;
 
         match piece {
@@ -1878,9 +1865,7 @@ impl Board {
             _ => {}
         }
 
-        if UPDATE_HASH {
-            self.set_castling_hash(rights);
-        }
+        self.set_castling_hash(rights);
     }
 
     pub fn parse_move(&self, s: &str) -> Option<Move> {
