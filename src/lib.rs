@@ -6,8 +6,6 @@ pub mod engine;
 use engine::*;
 
 pub fn run() {
-    println!("{}", std::mem::size_of::<engine::board::Undo>());
-
     let stdin = io::stdin();
     let mut engine = Engine::new(Config::new(1, 512));
 
