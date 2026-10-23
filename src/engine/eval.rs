@@ -1,4 +1,4 @@
-use super::super::board::Board;
+use super::board::Board;
 
 const H: usize = 128;
 const QA: i32 = 255;
@@ -78,9 +78,9 @@ impl Accumulator {
     }
 
     #[inline]
-    pub fn add(&mut self, net: &Nnue, color: usize, pt: usize, sq: usize) {
+    pub fn add(&mut self, net: &Nnue, color: u8, pt: u8, sq: usize) {
         for p in 0..2 {
-            let w = &net.ft_w[feature(p, color, pt, sq)];
+            let w = &net.ft_w[feature(p, color as usize, pt as usize, sq)];
             for i in 0..H {
                 self.v[p][i] += w[i];
             }
@@ -88,9 +88,9 @@ impl Accumulator {
     }
 
     #[inline]
-    pub fn sub(&mut self, net: &Nnue, color: usize, pt: usize, sq: usize) {
+    pub fn sub(&mut self, net: &Nnue, color: u8, pt: u8, sq: usize) {
         for p in 0..2 {
-            let w = &net.ft_w[feature(p, color, pt, sq)];
+            let w = &net.ft_w[feature(p, color as usize, pt as usize, sq)];
             for i in 0..H {
                 self.v[p][i] -= w[i];
             }

@@ -20,19 +20,21 @@ pub const F8: u8 = 61;
 pub const G8: u8 = 62;
 pub const H8: u8 = 63;
 
-pub const WP: usize = 0;
-pub const WN: usize = 1;
-pub const WB: usize = 2;
-pub const WR: usize = 3;
-pub const WQ: usize = 4;
-pub const WK: usize = 5;
+pub const WP: u8 = 0;
+pub const WN: u8 = 1;
+pub const WB: u8 = 2;
+pub const WR: u8 = 3;
+pub const WQ: u8 = 4;
+pub const WK: u8 = 5;
 
-pub const BP: usize = 6;
-pub const BN: usize = 7;
-pub const BB: usize = 8;
-pub const BR: usize = 9;
-pub const BQ: usize = 10;
-pub const BK: usize = 11;
+pub const BP: u8 = 6;
+pub const BN: u8 = 7;
+pub const BB: u8 = 8;
+pub const BR: u8 = 9;
+pub const BQ: u8 = 10;
+pub const BK: u8 = 11;
+
+pub const NN: u8 = 12;
 
 pub const WK_CASTLE: u8 = 1 << 0;
 pub const WQ_CASTLE: u8 = 1 << 1;
@@ -63,7 +65,7 @@ pub struct Board {
 
     turn: bool,
     castling: u8,
-    en_passant: Option<u8>,
+    en_passant: u8,
 
     hash: u64,
 }
@@ -88,33 +90,66 @@ struct CheckInfo {
     pin_rays: [u64; 64],
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum MoveType {
-    Quiet,
-    Capture,
-    DoublePawnPush,
-    EnPassant,
-    CastleKingSide,
-    CastleQueenSide,
-    Promotion,
-    PromotionCapture,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Move {
-    pub from: u8,
-    pub to: u8,
-    pub move_type: MoveType,
-    pub promotion: Option<usize>,
-}
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(transparent)]
+pub struct Move(u32);
 
 impl Move {
-    pub const NONE: Self = Move {
-        from: 0,
-        to: 0,
-        move_type: MoveType::Quiet,
-        promotion: None,
-    };
+    pub const NONE: Self = Move(0);
+
+    const FROM_SHIFT: u32 = 26;
+    const   TO_SHIFT: u32 = 20;
+    const MVTP_SHIFT: u32 = 17;
+    const PROM_SHIFT: u32 = 13;
+
+    const FROM_MASK: u32 = 0b111111 << Self::FROM_SHIFT;
+    const   TO_MASK: u32 = 0b111111 <<   Self::TO_SHIFT;
+    const MVTP_MASK: u32 = 0b111    << Self::MVTP_SHIFT;
+    const PROM_MASK: u32 = 0b1111   << Self::PROM_SHIFT;
+
+    pub const MVTP_QUIET: u8 = 0;
+    pub const MVTP_CAPTURE: u8 = 1;
+    pub const MVTP_DOUBLE_PAWN_PUSH: u8 = 2;
+    pub const MVTP_EN_PASSANT: u8 = 3;
+    pub const MVTP_CASTLE_KING_SIDE: u8 = 4;
+    pub const MVTP_CASTLE_QUEEN_SIDE: u8 = 5;
+    pub const MVTP_PROMOTION: u8 = 6;
+    pub const MVTP_PROMOTION_CAPTURE: u8 = 7;
+
+    #[inline(always)]
+    pub const fn new(from: u8, to: u8, move_type: u8, promotion: u8) -> Self {
+        Self(((from as u32) << Self::FROM_SHIFT) | ((to as u32) << Self::TO_SHIFT) | ((move_type as u32) << Self::MVTP_SHIFT) | ((promotion as u32) << Self::PROM_SHIFT))
+    }
+
+    #[inline(always)]
+    pub const fn from_raw(raw: u32) -> Self {
+        Self(raw)
+    }
+
+    #[inline(always)]
+    pub const fn to_raw(self) -> u32 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub const fn from(&self) -> u8 {
+        ((self.0 & Self::FROM_MASK) >> Self::FROM_SHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub const fn to(&self) -> u8 {
+        ((self.0 & Self::TO_MASK) >> Self::TO_SHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub const fn move_type(&self) -> u8 {
+        ((self.0 & Self::MVTP_MASK) >> Self::MVTP_SHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub const fn promotion(&self) -> u8 {
+        ((self.0 & Self::PROM_MASK) >> Self::PROM_SHIFT) as u8
+    }
 }
 
 impl std::fmt::Display for Move {
@@ -122,12 +157,11 @@ impl std::fmt::Display for Move {
         f.write_str(
             format!(
                 "{}{}{}",
-                str_from_square(self.from),
-                str_from_square(self.to),
-                if self.move_type == MoveType::Promotion
-                    || self.move_type == MoveType::PromotionCapture
-                {
-                    match self.promotion.unwrap() {
+                str_from_square(self.from()),
+                str_from_square(self.to()),
+                if self.move_type() == Move::MVTP_PROMOTION
+                    || self.move_type() == Move::MVTP_PROMOTION_CAPTURE {
+                    match self.promotion() {
                         BN | WN => "n",
                         BB | WB => "b",
                         BR | WR => "r",
@@ -147,13 +181,13 @@ impl std::fmt::Display for Move {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Undo {
-    pub captured_piece: Option<usize>,
-    pub captured_square: Option<u8>,
+    pub captured_piece: u8,
+    pub captured_square: u8,
 
-    pub moved_piece: usize,
+    pub moved_piece: u8,
 
     pub castling: u8,
-    pub en_passant: Option<u8>,
+    pub en_passant: u8,
 
     pub mv: Move,
 
@@ -268,7 +302,7 @@ impl Board {
             piece_on,
             turn: true,
             castling: 0b00001111,
-            en_passant: None,
+            en_passant: u8::MAX,
             hash: 0,
         };
         instance.hash = instance.recompute_hash();
@@ -281,8 +315,8 @@ impl Board {
     }
 
     #[inline]
-    fn ep_file(en_passant: Option<u8>) -> Option<usize> {
-        en_passant.map(|sq| (sq % 8) as usize)
+    fn ep_file(en_passant: u8) -> u8 {
+        en_passant % 8
     }
 
     #[inline]
@@ -295,17 +329,19 @@ impl Board {
     }
 
     #[inline]
-    fn set_en_passant_hash(&mut self, new_ep: Option<u8>) {
+    fn set_en_passant_hash(&mut self, new_ep: u8) {
         let z = Zobrist::get();
 
-        if let Some(file) = Self::ep_file(self.en_passant) {
-            self.hash ^= z.en_passant[file];
+        let file = Self::ep_file(self.en_passant);
+        if file != u8::MAX {
+            self.hash ^= z.en_passant[file as usize];
         }
 
         self.en_passant = new_ep;
 
-        if let Some(file) = Self::ep_file(self.en_passant) {
-            self.hash ^= z.en_passant[file];
+        let file = Self::ep_file(self.en_passant);
+        if file != u8::MAX {
+            self.hash ^= z.en_passant[file as usize];
         }
     }
 
@@ -317,8 +353,9 @@ impl Board {
             hash ^= z.side;
         }
 
-        if let Some(file) = Self::ep_file(self.en_passant) {
-            hash ^= z.en_passant[file];
+        let file = Self::ep_file(self.en_passant);
+        if file != u8::MAX {
+            hash ^= z.en_passant[file as usize];
         }
 
         for piece in 0..12 {
@@ -363,13 +400,18 @@ impl Board {
     }
 
     pub fn make_move(&mut self, mv: Move) -> Undo {
-        let piece = self.piece_at(mv.from).expect(&format!("Brak figury na polu from: {}", mv)[..]);
+        let mv_from = mv.from();
+        let mv_to = mv.to();
+
+        let piece = self.piece_at(mv_from);
+        assert_ne!(piece, NN);
+        //println!("move: {}", mv);
 
         let mut undo = Undo {
             mv,
             moved_piece: piece,
-            captured_piece: None,
-            captured_square: None,
+            captured_piece: NN,
+            captured_square: NN,
             castling: self.castling,
             en_passant: self.en_passant,
             hash: self.hash,
@@ -381,25 +423,34 @@ impl Board {
         // 1. BICIE
         // --------------------------------------------------
 
-        match mv.move_type {
-            MoveType::Capture | MoveType::PromotionCapture => {
-                if let Some(piece) = self.piece_at(mv.to) {
-                    self.remove_piece(piece, mv.to);
+        match mv.move_type() {
+            Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => {
+                if let piece = self.piece_at(mv_to) && piece != NN {
+                    self.remove_piece(piece, mv_to);
 
-                    undo.captured_piece = Some(piece);
-                    undo.captured_square = Some(mv.to);
+                    undo.captured_piece = piece;
+                    undo.captured_square = mv_to;
                 }
             }
 
-            MoveType::EnPassant => {
-                let captured_square = if self.turn { mv.to - 8 } else { mv.to + 8 };
+            Move::MVTP_EN_PASSANT => {
+                let captured_square = if self.turn { mv_to - 8 } else { mv_to + 8 };
 
                 let captured_piece = if self.turn { BP } else { WP };
 
                 self.remove_piece(captured_piece, captured_square);
 
-                undo.captured_piece = Some(captured_piece);
-                undo.captured_square = Some(captured_square);
+                undo.captured_piece = captured_piece;
+                undo.captured_square = captured_square;
+            }
+
+            Move::MVTP_CAPTURE => {
+                if let captured_piece = self.piece_at(mv_to) && captured_piece != NN {
+                    self.remove_piece(captured_piece, mv_to);
+
+                    undo.captured_piece = captured_piece;
+                    undo.captured_square = mv_to;
+                }
             }
 
             _ => {}
@@ -409,18 +460,18 @@ impl Board {
         // 2. NORMALNY RUCH / PROMOCJA
         // --------------------------------------------------
 
-        match mv.move_type {
-            MoveType::Promotion | MoveType::PromotionCapture => {
+        match mv.move_type() {
+            Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => {
                 // usuwamy pionka
-                self.remove_piece(piece, mv.from);
+                self.remove_piece(piece, mv_from);
 
                 // dodajemy promowaną figurę
-                let promoted_piece = mv.promotion.expect("Brak figury promocji");
+                let promoted_piece = mv.promotion();
 
-                self.add_piece(promoted_piece, mv.to);
+                self.add_piece(promoted_piece, mv_to);
             }
 
-            MoveType::CastleKingSide => {
+            Move::MVTP_CASTLE_KING_SIDE => {
                 if self.turn {
                     // biały: e1 -> g1
                     self.move_piece(WK, E1, G1);
@@ -436,7 +487,7 @@ impl Board {
                 }
             }
 
-            MoveType::CastleQueenSide => {
+            Move::MVTP_CASTLE_QUEEN_SIDE => {
                 if self.turn {
                     // biały: e1 -> c1
                     self.move_piece(WK, E1, C1);
@@ -453,7 +504,7 @@ impl Board {
             }
 
             _ => {
-                self.move_piece(piece, mv.from, mv.to);
+                self.move_piece(piece, mv_from, mv_to);
             }
         }
 
@@ -461,22 +512,22 @@ impl Board {
         // 3. ROSZADA
         // --------------------------------------------------
 
-        self.update_castling_rights(piece, mv.from);
+        self.update_castling_rights(piece, mv_from);
 
-        if let (Some(captured), Some(square)) = (undo.captured_piece, undo.captured_square) {
-            self.update_castling_rights_capture(captured, square);
+        if undo.captured_piece != NN && undo.captured_square != u8::MAX {
+            self.update_castling_rights_capture(undo.captured_square, undo.captured_square);
         }
 
         // --------------------------------------------------
         // 4. EN PASSANT
         // --------------------------------------------------
 
-        self.set_en_passant_hash(None);
+        self.set_en_passant_hash(u8::MAX);
 
-        if matches!(mv.move_type, MoveType::DoublePawnPush) {
-            let ep = if self.turn { mv.from + 8 } else { mv.from - 8 };
+        if matches!(mv.move_type(), Move::MVTP_DOUBLE_PAWN_PUSH) {
+            let ep = if self.turn { mv_from + 8 } else { mv_from - 8 };
 
-            self.set_en_passant_hash(Some(ep));
+            self.set_en_passant_hash(ep);
         }
 
         self.turn = !self.turn;
@@ -487,30 +538,37 @@ impl Board {
 
     pub fn unmake_move(&mut self, undo: Undo) {
         let mv = undo.mv;
+        let mv_type = mv.move_type();
+        let mv_from = mv.from();
+        let mv_to = mv.to();
         // Najpierw wracamy do strony, która wykonała ruch
         self.turn = !self.turn;
 
-        let piece = match mv.move_type {
-            MoveType::Promotion | MoveType::PromotionCapture => {
+        let piece = match mv_type {
+            Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => {
                 // Promocja:
                 // usuwamy promowaną figurę
-                let promoted_piece = mv.promotion.expect("Brak promocji");
+                let promoted_piece = mv.promotion();
 
-                self.remove_piece(promoted_piece, mv.to);
+                self.remove_piece(promoted_piece, mv_to);
 
                 // i przywracamy pionka
                 if self.turn { WP } else { BP }
             }
 
-            _ => self.piece_at(mv.to).expect("Nie znaleziono figury na to"),
+            _ => {
+                let p = self.piece_at(mv_to);
+                assert_ne!(p, NN);
+                p
+            },
         };
 
         // --------------------------------------------------
         // ROSZADA
         // --------------------------------------------------
 
-        match mv.move_type {
-            MoveType::CastleKingSide => {
+        match mv.move_type() {
+            Move::MVTP_CASTLE_KING_SIDE => {
                 if self.turn {
                     self.move_piece(WK, G1, E1);
                     self.move_piece(WR, F1, H1);
@@ -520,7 +578,7 @@ impl Board {
                 }
             }
 
-            MoveType::CastleQueenSide => {
+            Move::MVTP_CASTLE_QUEEN_SIDE => {
                 if self.turn {
                     self.move_piece(WK, C1, E1);
                     self.move_piece(WR, D1, A1);
@@ -530,14 +588,14 @@ impl Board {
                 }
             }
 
-            MoveType::Promotion | MoveType::PromotionCapture => {
+            Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => {
                 let pawn = if self.turn { WP } else { BP };
 
-                self.add_piece(pawn, mv.from);
+                self.add_piece(pawn, mv_from);
             }
 
             _ => {
-                self.move_piece(piece, mv.to, mv.from);
+                self.move_piece(piece, mv_to, mv_from);
             }
         }
 
@@ -545,8 +603,8 @@ impl Board {
         // PRZYWRÓCENIE ZBITEJ FIGURY
         // --------------------------------------------------
 
-        if let (Some(piece), Some(square)) = (undo.captured_piece, undo.captured_square) {
-            self.add_piece(piece, square);
+        if undo.captured_piece != NN && undo.captured_square != u8::MAX {
+            self.add_piece(undo.captured_piece, undo.captured_square);
         }
 
         // --------------------------------------------------
@@ -566,17 +624,17 @@ impl Board {
     }
 
     #[inline(always)]
-    fn piece_at(&self, square: u8) -> Option<usize> {
+    fn piece_at(&self, square: u8) -> u8 {
         let p = self.piece_on[square as usize];
 
-        if p == 0 { None } else { Some((p - 1) as usize) }
+        if p == 0 { NN } else { p - 1 }
     }
 
     fn generate_pawn_moves(&mut self, mv_arr: &mut MoveArray, check_info: &CheckInfo) {
         let (pawns, enemy, pinned) = if self.turn {
-            (self.pieces[WP], self.black_occ, check_info.pinned)
+            (self.pieces[WP as usize], self.black_occ, check_info.pinned)
         } else {
-            (self.pieces[BP], self.white_occ, check_info.pinned)
+            (self.pieces[BP as usize], self.white_occ, check_info.pinned)
         };
 
         let empty = !self.occupancy;
@@ -619,12 +677,12 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move {
+            mv_arr.add_element(Move::new(
                 from,
                 to,
-                move_type: MoveType::Quiet,
-                promotion: None,
-            });
+                Move::MVTP_QUIET,
+                NN,
+            ));
         }
 
         // Promotions
@@ -661,12 +719,12 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move {
+            mv_arr.add_element(Move::new(
                 from,
                 to,
-                move_type: MoveType::DoublePawnPush,
-                promotion: None,
-            });
+                Move::MVTP_DOUBLE_PAWN_PUSH,
+                NN,
+            ));
         }
 
         // --------------------------------------------------
@@ -690,12 +748,12 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move {
+            mv_arr.add_element(Move::new(
                 from,
                 to,
-                move_type: MoveType::Capture,
-                promotion: None,
-            });
+                Move::MVTP_CAPTURE,
+                NN,
+            ));
         }
 
         let mut targets = promotion_captures;
@@ -734,12 +792,12 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move {
+            mv_arr.add_element(Move::new(
                 from,
                 to,
-                move_type: MoveType::Capture,
-                promotion: None,
-            });
+                Move::MVTP_CAPTURE,
+                NN,
+            ));
         }
 
         let mut targets = promotion_captures;
@@ -761,8 +819,8 @@ impl Board {
         // EN PASSANT
         // --------------------------------------------------
 
-        if let Some(ep) = self.en_passant {
-            let attackers = WHITE_PAWN_ATTACKERS[ep as usize] & pawns;
+        if self.en_passant != u8::MAX {
+            let attackers = WHITE_PAWN_ATTACKERS[self.en_passant as usize] & pawns;
 
             let mut attackers = attackers;
 
@@ -770,16 +828,16 @@ impl Board {
                 let from = attackers.trailing_zeros() as u8;
                 attackers &= attackers - 1;
 
-                if !self.en_passant_allowed(from, ep, true, check_info) {
+                if !self.en_passant_allowed(from, self.en_passant, true, check_info) {
                     continue;
                 }
 
-                mv_arr.add_element(Move {
+                mv_arr.add_element(Move::new(
                     from,
-                    to: ep,
-                    move_type: MoveType::EnPassant,
-                    promotion: None,
-                });
+                    self.en_passant,
+                    Move::MVTP_EN_PASSANT,
+                    NN,
+                ));
             }
         }
     }
@@ -787,38 +845,38 @@ impl Board {
     #[inline(always)]
     fn add_white_promotions(&self, from: u8, to: u8, capture: bool, mv_arr: &mut MoveArray) {
         let move_type = if capture {
-            MoveType::PromotionCapture
+            Move::MVTP_PROMOTION_CAPTURE
         } else {
-            MoveType::Promotion
+            Move::MVTP_PROMOTION
         };
 
-        mv_arr.add_element(Move {
+        mv_arr.add_element(Move::new(
             from,
             to,
             move_type,
-            promotion: Some(WQ),
-        });
+            WQ,
+        ));
 
-        mv_arr.add_element(Move {
+        mv_arr.add_element(Move::new(
             from,
             to,
             move_type,
-            promotion: Some(WR),
-        });
+            WR,
+        ));
 
-        mv_arr.add_element(Move {
+        mv_arr.add_element(Move::new(
             from,
             to,
             move_type,
-            promotion: Some(WB),
-        });
+            WB,
+        ));
 
-        mv_arr.add_element(Move {
+        mv_arr.add_element(Move::new(
             from,
             to,
             move_type,
-            promotion: Some(WN),
-        });
+            WN,
+        ));
     }
 
     fn generate_black_pawns(
@@ -851,12 +909,12 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move {
+            mv_arr.add_element(Move::new(
                 from,
                 to,
-                move_type: MoveType::Quiet,
-                promotion: None,
-            });
+                Move::MVTP_QUIET,
+                NN,
+            ));
         }
 
         // Promotions
@@ -893,12 +951,12 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move {
+            mv_arr.add_element(Move::new(
                 from,
                 to,
-                move_type: MoveType::DoublePawnPush,
-                promotion: None,
-            });
+                Move::MVTP_DOUBLE_PAWN_PUSH,
+                NN,
+            ));
         }
 
         // --------------------------------------------------
@@ -922,12 +980,12 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move {
+            mv_arr.add_element(Move::new(
                 from,
                 to,
-                move_type: MoveType::Capture,
-                promotion: None,
-            });
+                Move::MVTP_CAPTURE,
+                NN,
+            ));
         }
 
         let mut targets = promotion_captures;
@@ -966,12 +1024,12 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move {
+            mv_arr.add_element(Move::new(
                 from,
                 to,
-                move_type: MoveType::Capture,
-                promotion: None,
-            });
+                Move::MVTP_CAPTURE,
+                NN,
+            ));
         }
 
         let mut targets = promotion_captures;
@@ -993,8 +1051,8 @@ impl Board {
         // EN PASSANT
         // --------------------------------------------------
 
-        if let Some(ep) = self.en_passant {
-            let attackers = BLACK_PAWN_ATTACKERS[ep as usize] & pawns;
+        if self.en_passant != u8::MAX {
+            let attackers = BLACK_PAWN_ATTACKERS[self.en_passant as usize] & pawns;
 
             let mut attackers = attackers;
 
@@ -1002,16 +1060,16 @@ impl Board {
                 let from = attackers.trailing_zeros() as u8;
                 attackers &= attackers - 1;
 
-                if !self.en_passant_allowed(from, ep, false, check_info) {
+                if !self.en_passant_allowed(from, self.en_passant, false, check_info) {
                     continue;
                 }
 
-                mv_arr.add_element(Move {
+                mv_arr.add_element(Move::new(
                     from,
-                    to: ep,
-                    move_type: MoveType::EnPassant,
-                    promotion: None,
-                });
+                    self.en_passant,
+                    Move::MVTP_EN_PASSANT,
+                    NN,
+                ));
             }
         }
     }
@@ -1019,38 +1077,38 @@ impl Board {
     #[inline(always)]
     fn add_black_promotions(&self, from: u8, to: u8, capture: bool, mv_arr: &mut MoveArray) {
         let move_type = if capture {
-            MoveType::PromotionCapture
+            Move::MVTP_PROMOTION_CAPTURE
         } else {
-            MoveType::Promotion
+            Move::MVTP_PROMOTION
         };
 
-        mv_arr.add_element(Move {
+        mv_arr.add_element(Move::new(
             from,
             to,
             move_type,
-            promotion: Some(BQ),
-        });
+            BQ,
+        ));
 
-        mv_arr.add_element(Move {
+        mv_arr.add_element(Move::new(
             from,
             to,
             move_type,
-            promotion: Some(BR),
-        });
+            BR,
+        ));
 
-        mv_arr.add_element(Move {
+        mv_arr.add_element(Move::new(
             from,
             to,
             move_type,
-            promotion: Some(BB),
-        });
+            BB,
+        ));
 
-        mv_arr.add_element(Move {
+        mv_arr.add_element(Move::new(
             from,
             to,
             move_type,
-            promotion: Some(BN),
-        });
+            BN,
+        ));
     }
 
     fn en_passant_allowed(
@@ -1078,12 +1136,12 @@ impl Board {
         //
         // EP is special because the captured pawn disappears from
         // a different square, so evasion_mask alone is insufficient.
-        let undo = self.make_move(Move {
+        let undo = self.make_move(Move::new(
             from,
             to,
-            move_type: MoveType::EnPassant,
-            promotion: None,
-        });
+            Move::MVTP_EN_PASSANT,
+            NN,
+        ));
 
         let legal = !self.is_in_check(white);
 
@@ -1105,7 +1163,7 @@ impl Board {
             self.white_occ
         };
 
-        let mut pieces = self.pieces[if self.turn { WN } else { BN }];
+        let mut pieces = self.pieces[if self.turn { WN } else { BN } as usize];
 
         while pieces != 0 {
             let from = pieces.trailing_zeros() as u8;
@@ -1129,17 +1187,17 @@ impl Board {
                 targets &= targets - 1;
 
                 let move_type = if enemy & (1u64 << to) != 0 {
-                    MoveType::Capture
+                    Move::MVTP_CAPTURE
                 } else {
-                    MoveType::Quiet
+                    Move::MVTP_QUIET
                 };
 
-                mv_arr.add_element(Move {
+                mv_arr.add_element(Move::new(
                     from,
                     to,
                     move_type,
-                    promotion: None,
-                });
+                    NN,
+                ));
             }
         }
     }
@@ -1157,7 +1215,7 @@ impl Board {
             self.white_occ
         };
 
-        let mut pieces = self.pieces[if self.turn { WB } else { BB }];
+        let mut pieces = self.pieces[if self.turn { WB } else { BB } as usize];
 
         while pieces != 0 {
             let from = pieces.trailing_zeros() as u8;
@@ -1180,17 +1238,17 @@ impl Board {
                 targets &= targets - 1;
 
                 let move_type = if enemy & (1u64 << to) != 0 {
-                    MoveType::Capture
+                    Move::MVTP_CAPTURE
                 } else {
-                    MoveType::Quiet
+                    Move::MVTP_QUIET
                 };
 
-                mv_arr.add_element(Move {
+                mv_arr.add_element(Move::new(
                     from,
                     to,
                     move_type,
-                    promotion: None,
-                });
+                    NN,
+                ));
             }
         }
     }
@@ -1208,7 +1266,7 @@ impl Board {
             self.white_occ
         };
 
-        let mut pieces = self.pieces[if self.turn { WR } else { BR }];
+        let mut pieces = self.pieces[if self.turn { WR } else { BR } as usize];
 
         while pieces != 0 {
             let from = pieces.trailing_zeros() as u8;
@@ -1231,17 +1289,17 @@ impl Board {
                 targets &= targets - 1;
 
                 let move_type = if enemy & (1u64 << to) != 0 {
-                    MoveType::Capture
+                    Move::MVTP_CAPTURE
                 } else {
-                    MoveType::Quiet
+                    Move::MVTP_QUIET
                 };
 
-                mv_arr.add_element(Move {
+                mv_arr.add_element(Move::new(
                     from,
                     to,
                     move_type,
-                    promotion: None,
-                });
+                    NN,
+                ));
             }
         }
     }
@@ -1259,7 +1317,7 @@ impl Board {
             self.white_occ
         };
 
-        let mut pieces = self.pieces[if self.turn { WQ } else { BQ }];
+        let mut pieces = self.pieces[if self.turn { WQ } else { BQ } as usize];
 
         while pieces != 0 {
             let from = pieces.trailing_zeros() as u8;
@@ -1282,17 +1340,17 @@ impl Board {
                 targets &= targets - 1;
 
                 let move_type = if enemy & (1u64 << to) != 0 {
-                    MoveType::Capture
+                    Move::MVTP_CAPTURE
                 } else {
-                    MoveType::Quiet
+                    Move::MVTP_QUIET
                 };
 
-                mv_arr.add_element(Move {
+                mv_arr.add_element(Move::new(
                     from,
                     to,
                     move_type,
-                    promotion: None,
-                });
+                    NN,
+                ));
             }
         }
     }
@@ -1320,7 +1378,7 @@ impl Board {
     #[inline(always)]
     pub fn is_in_check(&self, white: bool) -> bool {
         let king = if white { WK } else { BK };
-        let king_bb = self.pieces[king];
+        let king_bb = self.pieces[king as usize];
 
         if king_bb == 0 {
             return true;
@@ -1334,39 +1392,39 @@ impl Board {
     #[inline(always)]
     fn is_square_attacked(&self, square: u8, by_white: bool, occupancy: u64) -> bool {
         let pawn = if by_white {
-            self.pieces[WP]
+            self.pieces[WP as usize]
         } else {
-            self.pieces[BP]
+            self.pieces[BP as usize]
         };
 
         let knight = if by_white {
-            self.pieces[WN]
+            self.pieces[WN as usize]
         } else {
-            self.pieces[BN]
+            self.pieces[BN as usize]
         };
 
         let bishop = if by_white {
-            self.pieces[WB]
+            self.pieces[WB as usize]
         } else {
-            self.pieces[BB]
+            self.pieces[BB as usize]
         };
 
         let rook = if by_white {
-            self.pieces[WR]
+            self.pieces[WR as usize]
         } else {
-            self.pieces[BR]
+            self.pieces[BR as usize]
         };
 
         let queen = if by_white {
-            self.pieces[WQ]
+            self.pieces[WQ as usize]
         } else {
-            self.pieces[BQ]
+            self.pieces[BQ as usize]
         };
 
         let king = if by_white {
-            self.pieces[WK]
+            self.pieces[WK as usize]
         } else {
-            self.pieces[BK]
+            self.pieces[BK as usize]
         };
 
         let pawn_attackers = if by_white {
@@ -1400,39 +1458,39 @@ impl Board {
 
     fn checkers(&self, king_sq: u8) -> u64 {
         let enemy_pawns = if self.turn {
-            self.pieces[BP]
+            self.pieces[BP as usize]
         } else {
-            self.pieces[WP]
+            self.pieces[WP as usize]
         };
 
         let enemy_knights = if self.turn {
-            self.pieces[BN]
+            self.pieces[BN as usize]
         } else {
-            self.pieces[WN]
+            self.pieces[WN as usize]
         };
 
         let enemy_bishops = if self.turn {
-            self.pieces[BB]
+            self.pieces[BB as usize]
         } else {
-            self.pieces[WB]
+            self.pieces[WB as usize]
         };
 
         let enemy_rooks = if self.turn {
-            self.pieces[BR]
+            self.pieces[BR as usize]
         } else {
-            self.pieces[WR]
+            self.pieces[WR as usize]
         };
 
         let enemy_queens = if self.turn {
-            self.pieces[BQ]
+            self.pieces[BQ as usize]
         } else {
-            self.pieces[WQ]
+            self.pieces[WQ as usize]
         };
 
         let enemy_king = if self.turn {
-            self.pieces[BK]
+            self.pieces[BK as usize]
         } else {
-            self.pieces[WK]
+            self.pieces[WK as usize]
         };
 
         let pawn_attackers = if self.turn {
@@ -1470,15 +1528,15 @@ impl Board {
         };
 
         let enemy_rooks = if self.turn {
-            self.pieces[BR] | self.pieces[BQ]
+            self.pieces[BR as usize] | self.pieces[BQ as usize]
         } else {
-            self.pieces[WR] | self.pieces[WQ]
+            self.pieces[WR as usize] | self.pieces[WQ as usize]
         };
 
         let enemy_bishops = if self.turn {
-            self.pieces[BB] | self.pieces[BQ]
+            self.pieces[BB as usize] | self.pieces[BQ as usize]
         } else {
-            self.pieces[WB] | self.pieces[WQ]
+            self.pieces[WB as usize] | self.pieces[WQ as usize]
         };
 
         const DIRECTIONS: [(i32, i32); 8] = [
@@ -1544,7 +1602,7 @@ impl Board {
     fn get_check_info(&self) -> CheckInfo {
         let king_piece = if self.turn { WK } else { BK };
 
-        let king_sq = self.pieces[king_piece].trailing_zeros() as u8;
+        let king_sq = self.pieces[king_piece as usize].trailing_zeros() as u8;
 
         let checkers = self.checkers(king_sq);
 
@@ -1562,7 +1620,7 @@ impl Board {
             1 => {
                 let checker_sq = checkers.trailing_zeros() as u8;
 
-                let checker_piece = self.piece_at(checker_sq).unwrap();
+                let checker_piece = self.piece_at(checker_sq);
 
                 let slider = matches!(checker_piece, BB | WB | BQ | WQ | BR | WR);
 
@@ -1590,68 +1648,68 @@ impl Board {
         if self.turn {
             // White kingside.
             if self.castling & WK_CASTLE != 0
-                && self.pieces[WK] & (1u64 << E1) != 0
-                && self.pieces[WR] & (1u64 << H1) != 0
+                && self.pieces[WK as usize] & (1u64 << E1) != 0
+                && self.pieces[WR as usize] & (1u64 << H1) != 0
                 && self.occupancy & ((1u64 << F1) | (1u64 << G1)) == 0
                 && !self.is_square_attacked(E1, false, self.occupancy)
                 && !self.is_square_attacked(F1, false, self.occupancy)
                 && !self.is_square_attacked(G1, false, self.occupancy)
             {
-                mv_arr.add_element(Move {
-                    from: E1,
-                    to: G1,
-                    move_type: MoveType::CastleKingSide,
-                    promotion: None,
-                });
+                mv_arr.add_element(Move::new(
+                    E1,
+                    G1,
+                    Move::MVTP_CASTLE_KING_SIDE,
+                    NN,
+                ));
             }
 
             // White queenside.
             if self.castling & WQ_CASTLE != 0
-                && self.pieces[WK] & (1u64 << E1) != 0
-                && self.pieces[WR] & (1u64 << A1) != 0
+                && self.pieces[WK as usize] & (1u64 << E1) != 0
+                && self.pieces[WR as usize] & (1u64 << A1) != 0
                 && self.occupancy & ((1u64 << B1) | (1u64 << C1) | (1u64 << D1)) == 0
                 && !self.is_square_attacked(E1, false, self.occupancy)
                 && !self.is_square_attacked(D1, false, self.occupancy)
                 && !self.is_square_attacked(C1, false, self.occupancy)
             {
-                mv_arr.add_element(Move {
-                    from: E1,
-                    to: C1,
-                    move_type: MoveType::CastleQueenSide,
-                    promotion: None,
-                });
+                mv_arr.add_element(Move::new(
+                    E1,
+                    C1,
+                    Move::MVTP_CASTLE_QUEEN_SIDE,
+                    NN,
+                ));
             }
         } else {
             if self.castling & BK_CASTLE != 0
-                && self.pieces[BK] & (1u64 << E8) != 0
-                && self.pieces[BR] & (1u64 << H8) != 0
+                && self.pieces[BK as usize] & (1u64 << E8) != 0
+                && self.pieces[BR as usize] & (1u64 << H8) != 0
                 && self.occupancy & ((1u64 << F8) | (1u64 << G8)) == 0
                 && !self.is_square_attacked(E8, true, self.occupancy)
                 && !self.is_square_attacked(F8, true, self.occupancy)
                 && !self.is_square_attacked(G8, true, self.occupancy)
             {
-                mv_arr.add_element(Move {
-                    from: E8,
-                    to: G8,
-                    move_type: MoveType::CastleKingSide,
-                    promotion: None,
-                });
+                mv_arr.add_element(Move::new(
+                    E8,
+                    G8,
+                    Move::MVTP_CASTLE_KING_SIDE,
+                    NN,
+                ));
             }
 
             if self.castling & BQ_CASTLE != 0
-                && self.pieces[BK] & (1u64 << E8) != 0
-                && self.pieces[BR] & (1u64 << A8) != 0
+                && self.pieces[BK as usize] & (1u64 << E8) != 0
+                && self.pieces[BR as usize] & (1u64 << A8) != 0
                 && self.occupancy & ((1u64 << B8) | (1u64 << C8) | (1u64 << D8)) == 0
                 && !self.is_square_attacked(E8, true, self.occupancy)
                 && !self.is_square_attacked(D8, true, self.occupancy)
                 && !self.is_square_attacked(C8, true, self.occupancy)
             {
-                mv_arr.add_element(Move {
-                    from: E8,
-                    to: C8,
-                    move_type: MoveType::CastleQueenSide,
-                    promotion: None,
-                });
+                mv_arr.add_element(Move::new(
+                    E8,
+                    C8,
+                    Move::MVTP_CASTLE_QUEEN_SIDE,
+                    NN,
+                ));
             }
         }
     }
@@ -1688,24 +1746,24 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move {
+            mv_arr.add_element(Move::new(
                 from,
                 to,
-                move_type: if enemy & to_bb != 0 {
-                    MoveType::Capture
+                if enemy & to_bb != 0 {
+                    Move::MVTP_CAPTURE
                 } else {
-                    MoveType::Quiet
+                    Move::MVTP_QUIET
                 },
-                promotion: None,
-            });
+                NN,
+            ));
         }
     }
 
     #[inline(always)]
-    fn add_piece(&mut self, piece: usize, square: u8) {
+    fn add_piece(&mut self, piece: u8, square: u8) {
         let bb = 1u64 << square;
 
-        self.pieces[piece] |= bb;
+        self.pieces[piece as usize] |= bb;
         self.piece_on[square as usize] = (piece + 1) as u8;
 
         if piece < 6 {
@@ -1716,14 +1774,14 @@ impl Board {
 
         self.occupancy |= bb;
 
-        self.hash ^= Zobrist::get().piece[piece][square as usize];
+        self.hash ^= Zobrist::get().piece[piece as usize][square as usize];
     }
 
     #[inline(always)]
-    fn remove_piece(&mut self, piece: usize, square: u8) {
+    fn remove_piece(&mut self, piece: u8, square: u8) {
         let bb = 1u64 << square;
 
-        self.pieces[piece] &= !bb;
+        self.pieces[piece as usize] &= !bb;
         self.piece_on[square as usize] = 0;
 
         if piece < 6 {
@@ -1734,16 +1792,16 @@ impl Board {
 
         self.occupancy &= !bb;
 
-        self.hash ^= Zobrist::get().piece[piece][square as usize];
+        self.hash ^= Zobrist::get().piece[piece as usize][square as usize];
     }
 
     #[inline(always)]
-    fn move_piece(&mut self, piece: usize, from: u8, to: u8) {
+    fn move_piece(&mut self, piece: u8, from: u8, to: u8) {
         let from_bb = 1u64 << from;
         let to_bb = 1u64 << to;
         let mask = from_bb | to_bb;
 
-        self.pieces[piece] ^= mask;
+        self.pieces[piece as usize] ^= mask;
 
         self.piece_on[from as usize] = 0;
         self.piece_on[to as usize] = (piece + 1) as u8;
@@ -1757,11 +1815,12 @@ impl Board {
         self.occupancy ^= mask;
 
         let z = Zobrist::get();
-        self.hash ^= z.piece[piece][from as usize];
-        self.hash ^= z.piece[piece][to as usize];
+        self.hash ^= z.piece[piece as usize][from as usize];
+        self.hash ^= z.piece[piece as usize][to as usize];
     }
 
-    fn update_castling_rights(&mut self, piece: usize, from: u8) {
+    #[inline(always)]
+    fn update_castling_rights(&mut self, piece: u8, from: u8) {
         let mut rights = self.castling;
 
         match piece {
@@ -1779,7 +1838,8 @@ impl Board {
         self.set_castling_hash(rights);
     }
 
-    fn update_castling_rights_capture(&mut self, piece: usize, square: u8) {
+    #[inline(always)]
+    fn update_castling_rights_capture(&mut self, piece: u8, square: u8) {
         let mut rights = self.castling;
 
         match piece {
@@ -1804,60 +1864,60 @@ impl Board {
         let from = square_from_str(&s[0..2])?;
         let to = square_from_str(&s[2..4])?;
 
-        let piece = self.piece_at(from)?;
+        let piece = self.piece_at(from);
 
         // Czy ruch jest biciem?
-        let capture = self.piece_at(to).is_some();
+        let capture = self.piece_at(to) != NN;
 
         // Roszada
         if piece == 5 && self.turn {
             if from == E1 && to == G1 && self.castling & WK_CASTLE != 0 {
-                return Some(Move {
+                return Some(Move::new(
                     from,
                     to,
-                    move_type: MoveType::CastleKingSide,
-                    promotion: None,
-                });
+                    Move::MVTP_CASTLE_KING_SIDE,
+                    NN,
+                ));
             }
 
             if from == E1 && to == C1 && self.castling & WQ_CASTLE != 0 {
-                return Some(Move {
+                return Some(Move::new(
                     from,
                     to,
-                    move_type: MoveType::CastleQueenSide,
-                    promotion: None,
-                });
+                    Move::MVTP_CASTLE_QUEEN_SIDE,
+                    NN,
+                ));
             }
         }
 
         if piece == 11 && !self.turn {
             if from == E8 && to == G8 && self.castling & BK_CASTLE != 0 {
-                return Some(Move {
+                return Some(Move::new(
                     from,
                     to,
-                    move_type: MoveType::CastleKingSide,
-                    promotion: None,
-                });
+                    Move::MVTP_CASTLE_KING_SIDE,
+                    NN,
+                ));
             }
 
             if from == E8 && to == C8 && self.castling & BQ_CASTLE != 0 {
-                return Some(Move {
+                return Some(Move::new(
                     from,
                     to,
-                    move_type: MoveType::CastleQueenSide,
-                    promotion: None,
-                });
+                    Move::MVTP_CASTLE_QUEEN_SIDE,
+                    NN,
+                ));
             }
         }
 
         // En passant
-        if self.en_passant == Some(to) && (piece == 0 || piece == 6) {
-            return Some(Move {
+        if self.en_passant == to && (piece == 0 || piece == 6) {
+            return Some(Move::new(
                 from,
                 to,
-                move_type: MoveType::EnPassant,
-                promotion: None,
-            });
+                Move::MVTP_EN_PASSANT,
+                NN,
+            ));
         }
 
         // Promocja
@@ -1894,54 +1954,54 @@ impl Board {
                 _ => return None,
             };
 
-            return Some(Move {
+            return Some(Move::new(
                 from,
                 to,
-                move_type: if capture {
-                    MoveType::PromotionCapture
+                if capture {
+                    Move::MVTP_PROMOTION_CAPTURE
                 } else {
-                    MoveType::Promotion
+                    Move::MVTP_PROMOTION
                 },
-                promotion: Some(promotion),
-            });
+                promotion,
+            ));
         }
 
         // Podwójny ruch pionem
         if piece == WP && from / 8 == 1 && to == from + 16 {
-            return Some(Move {
+            return Some(Move::new(
                 from,
                 to,
-                move_type: MoveType::DoublePawnPush,
-                promotion: None,
-            });
+                Move::MVTP_DOUBLE_PAWN_PUSH,
+                NN,
+            ));
         }
 
         if piece == BP && from / 8 == 6 && to == from - 16 {
-            return Some(Move {
+            return Some(Move::new(
                 from,
                 to,
-                move_type: MoveType::DoublePawnPush,
-                promotion: None,
-            });
+                Move::MVTP_DOUBLE_PAWN_PUSH,
+                NN,
+            ));
         }
 
         // Zwykłe bicie
         if capture {
-            return Some(Move {
+            return Some(Move::new(
                 from,
                 to,
-                move_type: MoveType::Capture,
-                promotion: None,
-            });
+                Move::MVTP_CAPTURE,
+                NN,
+            ));
         }
 
         // Zwykły ruch
-        Some(Move {
+        Some(Move::new(
             from,
             to,
-            move_type: MoveType::Quiet,
-            promotion: None,
-        })
+            Move::MVTP_QUIET,
+            NN,
+        ))
     }
 
     pub fn position_fen(&mut self, fen: &[&str]) {
@@ -1995,52 +2055,52 @@ impl Board {
 
                     match c {
                         'P' => {
-                            pieces[WP] |= bit;
+                            pieces[WP as usize] |= bit;
                             piece_on[square as usize] = 1u8;
                         }
                         'N' => {
-                            pieces[WN] |= bit;
+                            pieces[WN as usize] |= bit;
                             piece_on[square as usize] = 2u8;
                         }
                         'B' => {
-                            pieces[WB] |= bit;
+                            pieces[WB as usize] |= bit;
                             piece_on[square as usize] = 3u8;
                         }
                         'R' => {
-                            pieces[WR] |= bit;
+                            pieces[WR as usize] |= bit;
                             piece_on[square as usize] = 4u8;
                         }
                         'Q' => {
-                            pieces[WQ] |= bit;
+                            pieces[WQ as usize] |= bit;
                             piece_on[square as usize] = 5u8;
                         }
                         'K' => {
-                            pieces[WK] |= bit;
+                            pieces[WK as usize] |= bit;
                             piece_on[square as usize] = 6u8;
                         }
 
                         'p' => {
-                            pieces[BP] |= bit;
+                            pieces[BP as usize] |= bit;
                             piece_on[square as usize] = 7u8;
                         }
                         'n' => {
-                            pieces[BN] |= bit;
+                            pieces[BN as usize] |= bit;
                             piece_on[square as usize] = 8u8;
                         }
                         'b' => {
-                            pieces[BB] |= bit;
+                            pieces[BB as usize] |= bit;
                             piece_on[square as usize] = 9u8;
                         }
                         'r' => {
-                            pieces[BR] |= bit;
+                            pieces[BR as usize] |= bit;
                             piece_on[square as usize] = 10u8;
                         }
                         'q' => {
-                            pieces[BQ] |= bit;
+                            pieces[BQ as usize] |= bit;
                             piece_on[square as usize] = 11u8;
                         }
                         'k' => {
-                            pieces[BK] |= bit;
+                            pieces[BK as usize] |= bit;
                             piece_on[square as usize] = 12u8;
                         }
 
@@ -2102,18 +2162,18 @@ impl Board {
         // --------------------------------------------------
 
         let en_passant = if en_passant_fen == "-" {
-            None
+            u8::MAX
         } else {
-            square_from_str(en_passant_fen)
+            square_from_str(en_passant_fen).unwrap_or(u8::MAX)
         };
 
         // --------------------------------------------------
         // OCCUPANCY
         // --------------------------------------------------
 
-        let white_occ = pieces[WP] | pieces[WN] | pieces[WB] | pieces[WR] | pieces[WQ] | pieces[WK];
+        let white_occ = pieces[WP as usize] | pieces[WN as usize] | pieces[WB as usize] | pieces[WR as usize] | pieces[WQ as usize] | pieces[WK as usize];
 
-        let black_occ = pieces[BP] | pieces[BN] | pieces[BB] | pieces[BR] | pieces[BQ] | pieces[BK];
+        let black_occ = pieces[BP as usize] | pieces[BN as usize] | pieces[BB as usize] | pieces[BR as usize] | pieces[BQ as usize] | pieces[BK as usize];
 
         let occupancy = white_occ | black_occ;
 

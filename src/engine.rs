@@ -73,7 +73,7 @@ impl Engine {
             while bb != 0 {
                 let sq = bb.trailing_zeros() as usize;
                 bb &= bb - 1;
-                acc.add(&self.nnue, piece / 6, piece % 6, sq);
+                acc.add(&self.nnue, (piece / 6) as u8, (piece % 6) as u8, sq);
             }
         }
         acc
@@ -547,27 +547,27 @@ impl Config {
 fn update_acc(acc: &mut eval::Accumulator, net: &eval::Nnue, undo: &Undo) {
     let mv = undo.mv;
     let piece = undo.moved_piece;
-    let (from, to) = (mv.from as usize, mv.to as usize);
+    let (from, to) = (mv.from() as usize, mv.to() as usize);
 
     acc.sub(net, piece / 6, piece % 6, from);
 
-    let placed = match mv.move_type {
-        MoveType::Promotion | MoveType::PromotionCapture => mv.promotion.unwrap(),
+    let placed = match mv.move_type() {
+        Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => mv.promotion(),
         _ => piece,
     };
     acc.add(net, placed / 6, placed % 6, to);
 
-    if let (Some(cap), Some(sq)) = (undo.captured_piece, undo.captured_square) {
-        acc.sub(net, cap / 6, cap % 6, sq as usize);
+    if undo.captured_piece != NN && undo.captured_square != u8::MAX {
+        acc.sub(net, undo.captured_piece / 6, undo.captured_piece % 6, undo.captured_square as usize);
     }
 
     // Castling also moves the rook (piece type 3).
-    match mv.move_type {
-        MoveType::CastleKingSide => {
+    match mv.move_type() {
+        Move::MVTP_CASTLE_KING_SIDE => {
             acc.sub(net, piece / 6, 3, to + 1);
             acc.add(net, piece / 6, 3, to - 1);
         }
-        MoveType::CastleQueenSide => {
+        Move::MVTP_CASTLE_QUEEN_SIDE => {
             acc.sub(net, piece / 6, 3, to - 2);
             acc.add(net, piece / 6, 3, to + 1);
         }
