@@ -98,14 +98,14 @@ impl Move {
     pub const NONE: Self = Move(0);
 
     const FROM_SHIFT: u32 = 26;
-    const   TO_SHIFT: u32 = 20;
+    const TO_SHIFT: u32 = 20;
     const MVTP_SHIFT: u32 = 17;
     const PROM_SHIFT: u32 = 13;
 
     const FROM_MASK: u32 = 0b111111 << Self::FROM_SHIFT;
-    const   TO_MASK: u32 = 0b111111 <<   Self::TO_SHIFT;
-    const MVTP_MASK: u32 = 0b111    << Self::MVTP_SHIFT;
-    const PROM_MASK: u32 = 0b1111   << Self::PROM_SHIFT;
+    const TO_MASK: u32 = 0b111111 << Self::TO_SHIFT;
+    const MVTP_MASK: u32 = 0b111 << Self::MVTP_SHIFT;
+    const PROM_MASK: u32 = 0b1111 << Self::PROM_SHIFT;
 
     pub const MVTP_QUIET: u8 = 0;
     pub const MVTP_CAPTURE: u8 = 1;
@@ -118,7 +118,12 @@ impl Move {
 
     #[inline(always)]
     pub const fn new(from: u8, to: u8, move_type: u8, promotion: u8) -> Self {
-        Self(((from as u32) << Self::FROM_SHIFT) | ((to as u32) << Self::TO_SHIFT) | ((move_type as u32) << Self::MVTP_SHIFT) | ((promotion as u32) << Self::PROM_SHIFT))
+        Self(
+            ((from as u32) << Self::FROM_SHIFT)
+                | ((to as u32) << Self::TO_SHIFT)
+                | ((move_type as u32) << Self::MVTP_SHIFT)
+                | ((promotion as u32) << Self::PROM_SHIFT),
+        )
     }
 
     #[inline(always)]
@@ -160,7 +165,8 @@ impl std::fmt::Display for Move {
                 str_from_square(self.from()),
                 str_from_square(self.to()),
                 if self.move_type() == Move::MVTP_PROMOTION
-                    || self.move_type() == Move::MVTP_PROMOTION_CAPTURE {
+                    || self.move_type() == Move::MVTP_PROMOTION_CAPTURE
+                {
                     match self.promotion() {
                         BN | WN => "n",
                         BB | WB => "b",
@@ -324,7 +330,7 @@ impl Board {
 
     #[inline]
     fn ep_file(en_passant: u8) -> u8 {
-        en_passant % 8
+        if en_passant != u8::MAX {en_passant % 8} else {u8::MAX}
     }
 
     #[inline(always)]
@@ -439,7 +445,9 @@ impl Board {
 
         match mv.move_type() {
             Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => {
-                if let piece = self.piece_at(mv_to) && piece != NN {
+                if let piece = self.piece_at(mv_to)
+                    && piece != NN
+                {
                     self.remove_piece(piece, mv_to);
 
                     undo.captured_piece = piece;
@@ -459,7 +467,9 @@ impl Board {
             }
 
             Move::MVTP_CAPTURE => {
-                if let captured_piece = self.piece_at(mv_to) && captured_piece != NN {
+                if let captured_piece = self.piece_at(mv_to)
+                    && captured_piece != NN
+                {
                     self.remove_piece(captured_piece, mv_to);
 
                     undo.captured_piece = captured_piece;
@@ -529,7 +539,7 @@ impl Board {
         self.update_castling_rights(piece, mv_from);
 
         if undo.captured_piece != NN && undo.captured_square != u8::MAX {
-            self.update_castling_rights_capture(undo.captured_square, undo.captured_square);
+            self.update_castling_rights_capture(undo.captured_piece, undo.captured_square);
         }
 
         // --------------------------------------------------
@@ -574,7 +584,7 @@ impl Board {
                 let p = self.piece_at(mv_to);
                 assert_ne!(p, NN);
                 p
-            },
+            }
         };
 
         // --------------------------------------------------
@@ -691,12 +701,7 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move::new(
-                from,
-                to,
-                Move::MVTP_QUIET,
-                NN,
-            ));
+            mv_arr.add_element(Move::new(from, to, Move::MVTP_QUIET, NN));
         }
 
         // Promotions
@@ -733,12 +738,7 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move::new(
-                from,
-                to,
-                Move::MVTP_DOUBLE_PAWN_PUSH,
-                NN,
-            ));
+            mv_arr.add_element(Move::new(from, to, Move::MVTP_DOUBLE_PAWN_PUSH, NN));
         }
 
         // --------------------------------------------------
@@ -762,12 +762,7 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move::new(
-                from,
-                to,
-                Move::MVTP_CAPTURE,
-                NN,
-            ));
+            mv_arr.add_element(Move::new(from, to, Move::MVTP_CAPTURE, NN));
         }
 
         let mut targets = promotion_captures;
@@ -806,12 +801,7 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move::new(
-                from,
-                to,
-                Move::MVTP_CAPTURE,
-                NN,
-            ));
+            mv_arr.add_element(Move::new(from, to, Move::MVTP_CAPTURE, NN));
         }
 
         let mut targets = promotion_captures;
@@ -846,12 +836,7 @@ impl Board {
                     continue;
                 }
 
-                mv_arr.add_element(Move::new(
-                    from,
-                    self.en_passant,
-                    Move::MVTP_EN_PASSANT,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(from, self.en_passant, Move::MVTP_EN_PASSANT, NN));
             }
         }
     }
@@ -864,33 +849,13 @@ impl Board {
             Move::MVTP_PROMOTION
         };
 
-        mv_arr.add_element(Move::new(
-            from,
-            to,
-            move_type,
-            WQ,
-        ));
+        mv_arr.add_element(Move::new(from, to, move_type, WQ));
 
-        mv_arr.add_element(Move::new(
-            from,
-            to,
-            move_type,
-            WR,
-        ));
+        mv_arr.add_element(Move::new(from, to, move_type, WR));
 
-        mv_arr.add_element(Move::new(
-            from,
-            to,
-            move_type,
-            WB,
-        ));
+        mv_arr.add_element(Move::new(from, to, move_type, WB));
 
-        mv_arr.add_element(Move::new(
-            from,
-            to,
-            move_type,
-            WN,
-        ));
+        mv_arr.add_element(Move::new(from, to, move_type, WN));
     }
 
     fn generate_black_pawns(
@@ -923,12 +888,7 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move::new(
-                from,
-                to,
-                Move::MVTP_QUIET,
-                NN,
-            ));
+            mv_arr.add_element(Move::new(from, to, Move::MVTP_QUIET, NN));
         }
 
         // Promotions
@@ -965,12 +925,7 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move::new(
-                from,
-                to,
-                Move::MVTP_DOUBLE_PAWN_PUSH,
-                NN,
-            ));
+            mv_arr.add_element(Move::new(from, to, Move::MVTP_DOUBLE_PAWN_PUSH, NN));
         }
 
         // --------------------------------------------------
@@ -994,12 +949,7 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move::new(
-                from,
-                to,
-                Move::MVTP_CAPTURE,
-                NN,
-            ));
+            mv_arr.add_element(Move::new(from, to, Move::MVTP_CAPTURE, NN));
         }
 
         let mut targets = promotion_captures;
@@ -1038,12 +988,7 @@ impl Board {
                 continue;
             }
 
-            mv_arr.add_element(Move::new(
-                from,
-                to,
-                Move::MVTP_CAPTURE,
-                NN,
-            ));
+            mv_arr.add_element(Move::new(from, to, Move::MVTP_CAPTURE, NN));
         }
 
         let mut targets = promotion_captures;
@@ -1078,12 +1023,7 @@ impl Board {
                     continue;
                 }
 
-                mv_arr.add_element(Move::new(
-                    from,
-                    self.en_passant,
-                    Move::MVTP_EN_PASSANT,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(from, self.en_passant, Move::MVTP_EN_PASSANT, NN));
             }
         }
     }
@@ -1096,33 +1036,13 @@ impl Board {
             Move::MVTP_PROMOTION
         };
 
-        mv_arr.add_element(Move::new(
-            from,
-            to,
-            move_type,
-            BQ,
-        ));
+        mv_arr.add_element(Move::new(from, to, move_type, BQ));
 
-        mv_arr.add_element(Move::new(
-            from,
-            to,
-            move_type,
-            BR,
-        ));
+        mv_arr.add_element(Move::new(from, to, move_type, BR));
 
-        mv_arr.add_element(Move::new(
-            from,
-            to,
-            move_type,
-            BB,
-        ));
+        mv_arr.add_element(Move::new(from, to, move_type, BB));
 
-        mv_arr.add_element(Move::new(
-            from,
-            to,
-            move_type,
-            BN,
-        ));
+        mv_arr.add_element(Move::new(from, to, move_type, BN));
     }
 
     fn en_passant_allowed(
@@ -1150,12 +1070,7 @@ impl Board {
         //
         // EP is special because the captured pawn disappears from
         // a different square, so evasion_mask alone is insufficient.
-        let undo = self.make_move(Move::new(
-            from,
-            to,
-            Move::MVTP_EN_PASSANT,
-            NN,
-        ));
+        let undo = self.make_move(Move::new(from, to, Move::MVTP_EN_PASSANT, NN));
 
         let legal = !self.is_in_check(white);
 
@@ -1206,12 +1121,7 @@ impl Board {
                     Move::MVTP_QUIET
                 };
 
-                mv_arr.add_element(Move::new(
-                    from,
-                    to,
-                    move_type,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(from, to, move_type, NN));
             }
         }
     }
@@ -1257,12 +1167,7 @@ impl Board {
                     Move::MVTP_QUIET
                 };
 
-                mv_arr.add_element(Move::new(
-                    from,
-                    to,
-                    move_type,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(from, to, move_type, NN));
             }
         }
     }
@@ -1308,12 +1213,7 @@ impl Board {
                     Move::MVTP_QUIET
                 };
 
-                mv_arr.add_element(Move::new(
-                    from,
-                    to,
-                    move_type,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(from, to, move_type, NN));
             }
         }
     }
@@ -1359,12 +1259,7 @@ impl Board {
                     Move::MVTP_QUIET
                 };
 
-                mv_arr.add_element(Move::new(
-                    from,
-                    to,
-                    move_type,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(from, to, move_type, NN));
             }
         }
     }
@@ -1669,12 +1564,7 @@ impl Board {
                 && !self.is_square_attacked(F1, false, self.occupancy)
                 && !self.is_square_attacked(G1, false, self.occupancy)
             {
-                mv_arr.add_element(Move::new(
-                    E1,
-                    G1,
-                    Move::MVTP_CASTLE_KING_SIDE,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(E1, G1, Move::MVTP_CASTLE_KING_SIDE, NN));
             }
 
             // White queenside.
@@ -1686,12 +1576,7 @@ impl Board {
                 && !self.is_square_attacked(D1, false, self.occupancy)
                 && !self.is_square_attacked(C1, false, self.occupancy)
             {
-                mv_arr.add_element(Move::new(
-                    E1,
-                    C1,
-                    Move::MVTP_CASTLE_QUEEN_SIDE,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(E1, C1, Move::MVTP_CASTLE_QUEEN_SIDE, NN));
             }
         } else {
             if self.castling & BK_CASTLE != 0
@@ -1702,12 +1587,7 @@ impl Board {
                 && !self.is_square_attacked(F8, true, self.occupancy)
                 && !self.is_square_attacked(G8, true, self.occupancy)
             {
-                mv_arr.add_element(Move::new(
-                    E8,
-                    G8,
-                    Move::MVTP_CASTLE_KING_SIDE,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(E8, G8, Move::MVTP_CASTLE_KING_SIDE, NN));
             }
 
             if self.castling & BQ_CASTLE != 0
@@ -1718,12 +1598,7 @@ impl Board {
                 && !self.is_square_attacked(D8, true, self.occupancy)
                 && !self.is_square_attacked(C8, true, self.occupancy)
             {
-                mv_arr.add_element(Move::new(
-                    E8,
-                    C8,
-                    Move::MVTP_CASTLE_QUEEN_SIDE,
-                    NN,
-                ));
+                mv_arr.add_element(Move::new(E8, C8, Move::MVTP_CASTLE_QUEEN_SIDE, NN));
             }
         }
     }
@@ -1886,52 +1761,27 @@ impl Board {
         // Roszada
         if piece == 5 && self.turn {
             if from == E1 && to == G1 && self.castling & WK_CASTLE != 0 {
-                return Some(Move::new(
-                    from,
-                    to,
-                    Move::MVTP_CASTLE_KING_SIDE,
-                    NN,
-                ));
+                return Some(Move::new(from, to, Move::MVTP_CASTLE_KING_SIDE, NN));
             }
 
             if from == E1 && to == C1 && self.castling & WQ_CASTLE != 0 {
-                return Some(Move::new(
-                    from,
-                    to,
-                    Move::MVTP_CASTLE_QUEEN_SIDE,
-                    NN,
-                ));
+                return Some(Move::new(from, to, Move::MVTP_CASTLE_QUEEN_SIDE, NN));
             }
         }
 
         if piece == 11 && !self.turn {
             if from == E8 && to == G8 && self.castling & BK_CASTLE != 0 {
-                return Some(Move::new(
-                    from,
-                    to,
-                    Move::MVTP_CASTLE_KING_SIDE,
-                    NN,
-                ));
+                return Some(Move::new(from, to, Move::MVTP_CASTLE_KING_SIDE, NN));
             }
 
             if from == E8 && to == C8 && self.castling & BQ_CASTLE != 0 {
-                return Some(Move::new(
-                    from,
-                    to,
-                    Move::MVTP_CASTLE_QUEEN_SIDE,
-                    NN,
-                ));
+                return Some(Move::new(from, to, Move::MVTP_CASTLE_QUEEN_SIDE, NN));
             }
         }
 
         // En passant
         if self.en_passant == to && (piece == 0 || piece == 6) {
-            return Some(Move::new(
-                from,
-                to,
-                Move::MVTP_EN_PASSANT,
-                NN,
-            ));
+            return Some(Move::new(from, to, Move::MVTP_EN_PASSANT, NN));
         }
 
         // Promocja
@@ -1982,40 +1832,20 @@ impl Board {
 
         // Podwójny ruch pionem
         if piece == WP && from / 8 == 1 && to == from + 16 {
-            return Some(Move::new(
-                from,
-                to,
-                Move::MVTP_DOUBLE_PAWN_PUSH,
-                NN,
-            ));
+            return Some(Move::new(from, to, Move::MVTP_DOUBLE_PAWN_PUSH, NN));
         }
 
         if piece == BP && from / 8 == 6 && to == from - 16 {
-            return Some(Move::new(
-                from,
-                to,
-                Move::MVTP_DOUBLE_PAWN_PUSH,
-                NN,
-            ));
+            return Some(Move::new(from, to, Move::MVTP_DOUBLE_PAWN_PUSH, NN));
         }
 
         // Zwykłe bicie
         if capture {
-            return Some(Move::new(
-                from,
-                to,
-                Move::MVTP_CAPTURE,
-                NN,
-            ));
+            return Some(Move::new(from, to, Move::MVTP_CAPTURE, NN));
         }
 
         // Zwykły ruch
-        Some(Move::new(
-            from,
-            to,
-            Move::MVTP_QUIET,
-            NN,
-        ))
+        Some(Move::new(from, to, Move::MVTP_QUIET, NN))
     }
 
     pub fn position_fen(&mut self, fen: &[&str]) {
@@ -2185,9 +2015,19 @@ impl Board {
         // OCCUPANCY
         // --------------------------------------------------
 
-        let white_occ = pieces[WP as usize] | pieces[WN as usize] | pieces[WB as usize] | pieces[WR as usize] | pieces[WQ as usize] | pieces[WK as usize];
+        let white_occ = pieces[WP as usize]
+            | pieces[WN as usize]
+            | pieces[WB as usize]
+            | pieces[WR as usize]
+            | pieces[WQ as usize]
+            | pieces[WK as usize];
 
-        let black_occ = pieces[BP as usize] | pieces[BN as usize] | pieces[BB as usize] | pieces[BR as usize] | pieces[BQ as usize] | pieces[BK as usize];
+        let black_occ = pieces[BP as usize]
+            | pieces[BN as usize]
+            | pieces[BB as usize]
+            | pieces[BR as usize]
+            | pieces[BQ as usize]
+            | pieces[BK as usize];
 
         let occupancy = white_occ | black_occ;
 
@@ -2207,7 +2047,7 @@ impl Board {
             hash: 0,
         };
 
-        self.recompute_hash();
+        self.hash = self.recompute_hash();
     }
 }
 

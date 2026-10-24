@@ -116,6 +116,12 @@ fn read_i16(data: &[u8], offset: usize) -> i16 {
     i16::from_le_bytes([data[offset], data[offset + 1]])
 }
 
+#[pyfunction]
+#[pyo3(signature = (record))]
+fn decode_record_pos(record: &[u8], py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+    return Ok(Some(decode_v2_record(record).0.to_vec().into_pyarray(py).reshape([1, 2, MAX_ACTIVE])?.unbind().into_any()));
+}
+
 /// Decode one v2 record into the same 64 sparse feature indices that the
 /// old 136-byte format supplied:
 ///
@@ -412,5 +418,6 @@ fn iter_batches(
 fn fastdata(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BatchIterator>()?;
     m.add_function(wrap_pyfunction!(iter_batches, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_record_pos, m)?)?;
     Ok(())
 }

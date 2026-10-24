@@ -64,30 +64,22 @@ impl Engine {
         self.tt = TranspositionTable::new(hash);
     }
 
-    /// Full rebuild from the board; the only place that loops over all pieces.
+    /// Full rebuild from the board.
     fn fresh_acc(&self) -> eval::Accumulator {
         let mut acc = eval::Accumulator::new(&self.nnue);
         let pieces = self.board.get_board();
-        for piece in 0..12 {
-            let mut bb = pieces[piece];
-            while bb != 0 {
-                let sq = bb.trailing_zeros() as usize;
-                bb &= bb - 1;
-                acc.add(&self.nnue, (piece / 6) as u8, (piece % 6) as u8, sq);
-            }
+        let kings = eval::king_squares(&pieces);
+        for p in 0..2 {
+            acc.refresh(&self.nnue, p, &pieces, &kings);
         }
         acc
-    }
-
-    fn refresh_acc(&mut self) {
-        self.acc[0] = self.fresh_acc();
     }
 
     /// make_move + accumulator update for the child at ply + 1.
     fn make(&mut self, mv: Move, ply: usize) -> Undo {
         let undo = self.board.make_move(mv);
         self.acc[ply + 1] = self.acc[ply];
-        update_acc(&mut self.acc[ply + 1], &self.nnue, &undo);
+        update_acc(&mut self.acc[ply + 1], &self.nnue, &self.board, &undo);
 
         #[cfg(debug_assertions)]
         assert!(
@@ -96,6 +88,10 @@ impl Engine {
         );
 
         undo
+    }
+
+    fn refresh_acc(&mut self) {
+        self.acc[0] = self.fresh_acc();
     }
 
     pub fn newgame(&mut self) {
@@ -552,34 +548,54 @@ impl Config {
     }
 }
 
-fn update_acc(acc: &mut eval::Accumulator, net: &eval::Nnue, undo: &Undo) {
+fn update_acc(acc: &mut eval::Accumulator, net: &eval::Nnue, board: &Board, undo: &Undo) {
+    let pieces = board.get_board();
+    let kings = eval::king_squares(&pieces); // post-move king squares
+
     let mv = undo.mv;
     let piece = undo.moved_piece;
+    let (color, pt) = (piece / 6, piece % 6);
     let (from, to) = (mv.from() as usize, mv.to() as usize);
 
-    acc.sub(net, piece / 6, piece % 6, from);
-
-    let placed = match mv.move_type() {
-        Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => mv.promotion(),
-        _ => piece,
-    };
-    acc.add(net, placed / 6, placed % 6, to);
-
-    if undo.captured_piece != NN && undo.captured_square != u8::MAX {
-        acc.sub(net, undo.captured_piece / 6, undo.captured_piece % 6, undo.captured_square as usize);
-    }
-
-    // Castling also moves the rook (piece type 3).
-    match mv.move_type() {
-        Move::MVTP_CASTLE_KING_SIDE => {
-            acc.sub(net, piece / 6, 3, to + 1);
-            acc.add(net, piece / 6, 3, to - 1);
+    for p in 0..2usize {
+        // This side's king moved (incl. castling): all its features changed.
+        if pt == 5 && p == color as usize {
+            acc.refresh(net, p, &pieces, &kings);
+            continue;
         }
-        Move::MVTP_CASTLE_QUEEN_SIDE => {
-            acc.sub(net, piece / 6, 3, to - 2);
-            acc.add(net, piece / 6, 3, to + 1);
+
+        acc.sub(net, p, &kings, color, pt, from);
+
+        let placed = match mv.move_type() {
+            Move::MVTP_PROMOTION | Move::MVTP_PROMOTION_CAPTURE => mv.promotion(),
+            _ => piece,
+        };
+        acc.add(net, p, &kings, placed / 6, placed % 6, to);
+
+        if undo.captured_piece != NN && undo.captured_square != u8::MAX {
+            let cp = undo.captured_piece;
+            acc.sub(
+                net,
+                p,
+                &kings,
+                cp / 6,
+                cp % 6,
+                undo.captured_square as usize,
+            );
         }
-        _ => {}
+
+        // Castling also moves the rook (piece type 3).
+        match mv.move_type() {
+            Move::MVTP_CASTLE_KING_SIDE => {
+                acc.sub(net, p, &kings, color, 3, to + 1);
+                acc.add(net, p, &kings, color, 3, to - 1);
+            }
+            Move::MVTP_CASTLE_QUEEN_SIDE => {
+                acc.sub(net, p, &kings, color, 3, to - 2);
+                acc.add(net, p, &kings, color, 3, to + 1);
+            }
+            _ => {}
+        }
     }
 }
 

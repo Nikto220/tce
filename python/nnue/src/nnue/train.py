@@ -3,9 +3,10 @@ import os
 import time
 
 import torch
+import numpy as np
 
 from .constants import SCALE
-from .fastdata import iter_batches
+from .fastdata import iter_batches, decode_record_pos
 from .data import prefetch, record_to_fen
 from .export import export
 from .model import NNUE
@@ -53,7 +54,7 @@ def main():
     p.add_argument("--max-positions", type=int, default=0, help="use only the first N lines of the data file (0 = all)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--log-every", type=int, default=50, help="print progress every N batches (0 = off)")
-    p.add_argument("--only-forward", action="store_true", help="only execute the network forward on the first position in the data file")
+    p.add_argument("--only-forward", type=int, default=None, help="only execute the network forward on the Nth position in the data file")
     a = p.parse_args()
 
     device = torch.device("xpu" if torch.xpu.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
@@ -71,13 +72,13 @@ def main():
 
     if a.only_forward:
         with open(a.data, "rb") as f:
-            f.seek(32)
+            f.seek(32 * a.only_forward)
             record = f.read(32)
         fen = record_to_fen(record)
         print("fen:", fen)
-        pos = prefetch(iter_batches(a.data, 1, 1, 0, 1)).__next__()
-        result = torch.sigmoid(model(torch.from_numpy(pos[0]).to(device).long()))
-        print("eval:", result[0].item());
+        pos = decode_record_pos(record)
+        result = torch.sigmoid(model(torch.from_numpy(pos).to(device).long()))
+        print("eval:", np.log(result[0].item() / (1 - result[0].item())) * SCALE);
         return
 
     if start >= a.epochs:
