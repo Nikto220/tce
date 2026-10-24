@@ -27,7 +27,7 @@ const FLAG_WHITE_TO_MOVE: u8 = 1;
 
 const MAX_ACTIVE: usize = 32;
 
-const PAD: i16 = 768;
+const PAD: i32 = 40960;
 
 struct Dataset {
     mmap: Mmap,
@@ -125,7 +125,7 @@ fn read_i16(data: &[u8], offset: usize) -> i16 {
 /// V2 stores the actual board compactly:
 ///   occupancy = occupied squares
 ///   pieces    = 4-bit side-to-move-relative piece codes
-fn decode_v2_record(record: &[u8]) -> ([i16; 64], i16, f32, f32) {
+fn decode_v2_record(record: &[u8]) -> ([i32; 64], i16, f32, f32) {
     debug_assert_eq!(record.len(), RECORD_SIZE);
 
     let occupancy = u64::from_le_bytes(
@@ -135,83 +135,120 @@ fn decode_v2_record(record: &[u8]) -> ([i16; 64], i16, f32, f32) {
     );
 
     let score = read_i16(record, SCORE_OFFSET);
-
     let result_code = record[RESULT_OFFSET];
     debug_assert!(result_code <= 2);
 
     let flags = record[FLAGS_OFFSET];
     let white_to_move = flags & FLAG_WHITE_TO_MOVE != 0;
 
-    let mut us = [PAD; MAX_ACTIVE];
-    let mut them = [PAD; MAX_ACTIVE];
-
-    let mut n = 0usize;
+    // First find both kings.
+    let mut king_us = None;
+    let mut king_them = None;
     let mut occupied = occupancy;
+    let mut n = 0usize;
 
     while occupied != 0 {
         let sq = occupied.trailing_zeros() as usize;
         occupied &= occupied - 1;
 
-        // Pieces are packed in increasing-square order.
-        let nibble = n;
-        let byte = record[PIECES_OFFSET + nibble / 2];
-
-        let code = if nibble & 1 == 0 {
+        let byte = record[PIECES_OFFSET + n / 2];
+        let code = if n & 1 == 0 {
             byte & 0x0f
         } else {
             byte >> 4
         };
-
         debug_assert!(code < 12);
 
         let own = code < 6;
         let pt = (code % 6) as usize;
 
-        let us_sq = if white_to_move {
-            sq
-        } else {
-            sq ^ 56
-        };
-
-        let them_sq = if white_to_move {
-            sq ^ 56
-        } else {
-            sq
-        };
-
-        us[n] = ((if own { 0 } else { 384 })
-            + pt * 64
-            + us_sq) as i16;
-
-        them[n] = ((if own { 384 } else { 0 })
-            + pt * 64
-            + them_sq) as i16;
+        if pt == 5 {
+            if own {
+                king_us = Some(sq);
+            } else {
+                king_them = Some(sq);
+            }
+        }
 
         n += 1;
     }
 
-    // Preserve the old feature ordering. EmbeddingBag doesn't require this,
-    // but it keeps the representation deterministic and identical to the
-    // previous pos_features() ordering.
-    us[..n].sort_unstable();
-    them[..n].sort_unstable();
+    let king_us = king_us.expect("missing us king");
+    let king_them = king_them.expect("missing opponent king");
+
+    // Orient each perspective so its own pieces are viewed
+    // from White's side of the board.
+    let orient_us = |sq: usize| {
+        if white_to_move { sq } else { sq ^ 56 }
+    };
+    let orient_them = |sq: usize| {
+        if white_to_move { sq ^ 56 } else { sq }
+    };
+
+    let king_us = orient_us(king_us);
+    let king_them = orient_them(king_them);
+
+    let mut us = [PAD; MAX_ACTIVE];
+    let mut them = [PAD; MAX_ACTIVE];
+
+    let mut occupied = occupancy;
+    let mut n = 0usize;
+    let mut count = 0usize;
+
+    while occupied != 0 {
+        let sq = occupied.trailing_zeros() as usize;
+        occupied &= occupied - 1;
+
+        let byte = record[PIECES_OFFSET + n / 2];
+        let code = if n & 1 == 0 {
+            byte & 0x0f
+        } else {
+            byte >> 4
+        };
+
+        let own = code < 6;
+        let pt = (code % 6) as usize;
+        n += 1;
+
+        // HalfKP uses the king as the anchor, not as a piece feature.
+        if pt == 5 {
+            continue;
+        }
+
+        // us perspective: own pieces = 0..4,
+        // opponent pieces = 5..9.
+        let us_class = if own { pt } else { pt + 5 };
+        let us_sq = orient_us(sq);
+        us[count] =
+            (king_us * 640 + us_class * 64 + us_sq) as i32;
+
+        // opponent perspective: reverse the piece ownership.
+        let them_class = if own { pt + 5 } else { pt };
+        let them_sq = orient_them(sq);
+        them[count] =
+            (king_them * 640 + them_class * 64 + them_sq) as i32;
+
+        count += 1;
+    }
+
+    // Keep the same 64-element batch layout.
+    us[count..].fill(PAD);
+    them[count..].fill(PAD);
 
     let mut idx = [PAD; 64];
     idx[..32].copy_from_slice(&us);
     idx[32..64].copy_from_slice(&them);
 
-    let result = result_code as f32 * 0.5;
-
     (
         idx,
         score,
-        result,
+        result_code as f32 * 0.5,
         if white_to_move { 1.0 } else { 0.0 },
     )
 }
 
 /// Gather one batch from v2 records.
-fn build_batch(ds: &Dataset, base: usize, rel: &[usize]) -> (Vec<i16>, Vec<f32>, Vec<f32>) {
+fn build_batch(ds: &Dataset, base: usize, rel: &[usize]) -> (Vec<i32>, Vec<f32>, Vec<f32>) {
     let bs = rel.len();
 
     let mut idx = Vec::with_capacity(bs * 2 * MAX_ACTIVE);

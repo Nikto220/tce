@@ -7,3 +7,5 @@ build.ps1
 /python/nnue/src/nnue/*.pyc
 /python/nnue/data
 /python/nnue/target
+/python/nnue/*.pt
+/python/nnue/*.bin
