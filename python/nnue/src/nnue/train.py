@@ -96,7 +96,8 @@ def main():
             score = torch.from_numpy(score).to(device)
             result = torch.from_numpy(result).to(device)
             target = a.lam * torch.sigmoid(score / SCALE) + (1 - a.lam) * result
-            loss = ((torch.sigmoid(model(x)) - target) ** 2).mean()
+            with torch.amp.autocast(device.type, torch.bfloat16):
+                loss = ((torch.sigmoid(model(x)) - target) ** 2).mean()
             opt.zero_grad()
             loss.backward()
             opt.step()

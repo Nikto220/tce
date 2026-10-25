@@ -448,8 +448,7 @@ impl Engine {
             None
         };
 
-        moves.order_pv_move(pv_move, 1);
-        moves.order_pv_move(tt_move, 0);
+        moves.order_moves(&self.board, pv_move, tt_move);
 
         let mut best_score = -eval::INF;
 

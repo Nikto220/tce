@@ -155,6 +155,33 @@ impl Move {
     pub const fn promotion(&self) -> u8 {
         ((self.0 & Self::PROM_MASK) >> Self::PROM_SHIFT) as u8
     }
+
+    #[inline(always)]
+    pub fn to_score(&self, board: &Board) -> i32 {
+        let move_type = self.move_type();
+        if move_type == Self::MVTP_CAPTURE {
+            return 900 + piece_to_score(board.piece_at(self.to())) - piece_to_score(board.piece_at(self.from()));
+        } else {
+            return 0;
+        }
+    }
+}
+
+#[inline(always)]
+pub fn piece_to_score(piece: u8) -> i32 {
+    let mut piece = piece;
+    if piece > 5 {
+        piece -= 6;
+    }
+    match piece {
+        0 => 100,
+        1 => 320,
+        2 => 330,
+        3 => 500,
+        4 => 900,
+        5 => super::eval::INF,
+        _ => unreachable!("there are 6 pieces")
+    }
 }
 
 impl std::fmt::Display for Move {
@@ -246,6 +273,22 @@ impl MoveArray {
         let temp = self.moves[i1];
         self.moves[i1] = self.moves[i2];
         self.moves[i2] = temp;
+    }
+
+    #[inline(always)]
+    pub fn sort_moves_by_score(&mut self, start_idx: usize, board: &Board) {
+        if start_idx >= self.len {
+            return;
+        }
+
+        self.moves[start_idx..self.len].sort_unstable_by_key(|m| -m.to_score(board));
+    }
+
+    #[inline(always)]
+    pub fn order_moves(&mut self, board: &Board, pv_move: Option<Move>, tt_move: Option<Move>) {
+        self.order_pv_move(pv_move, 1);
+        self.order_pv_move(tt_move, 0);
+        self.sort_moves_by_score(2, board);
     }
 
     #[inline(always)]
